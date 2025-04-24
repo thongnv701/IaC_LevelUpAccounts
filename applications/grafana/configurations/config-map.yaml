@@ -1,0 +1,15 @@
+# grafana-configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-config
+data:
+  grafana.ini: |
+    [server]
+    root_url = https://grafana.nexorion.one
+
+    [auth]
+    disable_login_form = false
+
+    [auth.basic]
+    enabled = true
