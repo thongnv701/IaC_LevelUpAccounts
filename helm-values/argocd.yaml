@@ -1,0 +1,41 @@
+global:
+  domain: argocd.nexorion.one
+
+fullnameOverride: argocd
+
+crds:
+  install: true
+
+redis:
+  enabled: true
+
+repoServer:
+  replicas: 1
+
+applicationSet:
+  enabled: true
+  replicas: 1
+
+dex:
+  enabled: true
+  extraArgs:
+    - --disable-tls 
+
+server:
+  extraArgs: 
+    - --dex-server
+    - http://argocd-dex-server.argocd.svc.cluster.local:5556
+    - --dex-server-plaintext 
+  replicas: 1
+  ingress:
+    enabled: true
+    ingressClassName: nginx
+
+configs:
+  cm:
+    url: https://argocd.nexorion.one
+    exec.enabled: true
+    admin.enabled: true
+
+  params:
+    server.insecure: true
