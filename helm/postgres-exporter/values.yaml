@@ -1,0 +1,17 @@
+nodeSelector:
+  workload: prometheus-postgres
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    cpu: 100m
+    memory: 128Mi
+
+# Configure datasource to use a Kubernetes Secret
+config:
+  datasource:
+    # Host and username will be set via Helm values in main.tf
+    secretName: postgres-exporter-credentials
+    secretKey: password

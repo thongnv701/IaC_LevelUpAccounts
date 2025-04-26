@@ -1,0 +1,15 @@
+# Ignore Terraform state files
+terraform/.terraform/
+terraform/*.tfstate
+terraform/*.tfstate.backup
+
+# Ignore Helm chart dependencies
+helm/*/charts/
+helm/*/*.tgz
+
+# Ignore logs and temporary files
+*.log
+*.tmp
+terraform.tfvars
+tfplan
+.terraform.lock.hcl
