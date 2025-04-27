@@ -19,3 +19,12 @@ variable "rds_username" {
   description = "RDS username"
   type        = string
 }
+
+variable "rds_password" {
+  description = "RDS password"
+  type        = string
+}
+
+variable "private_key_content" {
+  sensitive   = true
+}

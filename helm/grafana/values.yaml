@@ -5,7 +5,7 @@ resources:
   limits:
     cpu: "200m"
     memory: "256Mi"
-    
+
 tolerations:
   - key: "node-role.kubernetes.io/master"
     operator: "Exists"

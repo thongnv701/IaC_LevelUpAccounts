@@ -13,3 +13,5 @@ helm/*/*.tgz
 terraform.tfvars
 tfplan
 .terraform.lock.hcl
+kubeconfig
+terraform_apply_output.txt
