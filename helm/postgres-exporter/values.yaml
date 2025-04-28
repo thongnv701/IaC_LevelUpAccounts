@@ -1,5 +1,5 @@
-nodeSelector:
-  workload: prometheus-postgres
+# nodeSelector:
+#   workload: prometheus-postgres
 
 resources:
   requests:

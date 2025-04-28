@@ -141,21 +141,27 @@ module "kubernetes" {
 
 
 // Add this temporarily to main.tf to test the Helm provider
+# modules/kubernetes/main.tf
+
 resource "helm_release" "nginx" {
-  provider = helm.with_config
+  provider   = helm.with_config
   name       = "nginx"
   repository = "https://charts.bitnami.com/bitnami"
   chart      = "nginx"
-  version    = "15.5.2"
+  version    = "18.2.2"  # Latest stable version
   namespace  = "default"
+  timeout    = 600       # Increase timeout for stability
+  wait       = true      # Wait for resources to be ready
 }
 
 resource "helm_release" "argocd" {
-  provider   = helm.with_config
-  name       = "argocd"
-  repository = "https://argoproj.github.io/argo-helm"
-  chart      = "argo-cd"
-  version    = "6.7.16"
-  namespace  = "argocd"
+  provider         = helm.with_config
+  name             = "argocd"
+  repository       = "https://argoproj.github.io/argo-helm"
+  chart            = "argo-cd"
+  version          = "7.6.0"  # Latest stable version
+  namespace        = "argocd"
   create_namespace = true
+  timeout          = 600
+  wait             = true
 }

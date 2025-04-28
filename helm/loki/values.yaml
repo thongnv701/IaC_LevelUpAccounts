@@ -1,6 +1,6 @@
 loki:
-  nodeSelector:
-    workload: loki
+  # nodeSelector:
+  #   workload: loki
   resources:
     requests:
       cpu: "200m"
