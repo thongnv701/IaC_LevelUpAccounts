@@ -12,8 +12,6 @@ spec:
     helm:
       values: |
         server:
-          nodeSelector:
-            workload: prometheus-postgres
           resources:
             requests:
               cpu: "200m"

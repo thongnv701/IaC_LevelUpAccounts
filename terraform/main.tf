@@ -165,3 +165,16 @@ resource "helm_release" "argocd" {
   timeout          = 600
   wait             = true
 }
+
+# wait for argocd server and redis to be ready
+resource "null_resource" "wait_for_argocd" {
+  depends_on = [
+    helm_release.argocd
+  ]
+  provisioner "local-exec" {
+    command = <<-EOT
+      kubectl --kubeconfig=${abspath(path.root)}/modules/compute/kubeconfig -n argocd wait --for=condition=Available --timeout=300s deployment/argocd-server &&
+      kubectl --kubeconfig=${abspath(path.root)}/modules/compute/kubeconfig -n argocd wait --for=condition=Ready --timeout=300s pod -l app.kubernetes.io/name=argocd-redis
+    EOT
+  }
+}
