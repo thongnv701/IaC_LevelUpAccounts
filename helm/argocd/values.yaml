@@ -33,5 +33,7 @@ server:
     ingressClassName: nginx
     hosts:
       - argocd.thongit.space
+    paths:
+      - /
   redis:
     host: argocd-redis

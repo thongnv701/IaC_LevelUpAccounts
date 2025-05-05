@@ -41,6 +41,10 @@ jobs:
         working-directory: ./terraform
         run: terraform init
 
+      - name: Debug kubeconfig
+        run: |
+          ls -l ./terraform/modules/compute/
+          cat ./terraform/modules/compute/kubeconfig || true
       - name: Terraform Destroy
         working-directory: ./terraform
         run: terraform destroy -auto-approve
