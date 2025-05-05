@@ -11,6 +11,7 @@ on:
 jobs:
   terraform:
     runs-on: ubuntu-latest
+    environment: terraform 
 
     env:
       TF_VAR_allowed_cidr: ${{ secrets.ALLOWED_CIDR }}
