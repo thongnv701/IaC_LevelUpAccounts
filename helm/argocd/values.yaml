@@ -1,6 +1,3 @@
-global:
-  domain: argocd.thongit.space
-
 fullnameOverride: argocd
 
 crds:
@@ -8,6 +5,10 @@ crds:
 
 redis:
   enabled: true
+  image:
+    tag: "6.2.4"
+  service:
+    port: 6379
 
 repoServer:
   replicas: 1
@@ -30,12 +31,5 @@ server:
   ingress:
     enabled: false
     ingressClassName: nginx
-
-configs:
-  cm:
-    url: http://argocd.thongit.space
-    exec.enabled: true
-    admin.enabled: true
-
-  params:
-    server.insecure: true
+  redis:
+    host: argocd-redis

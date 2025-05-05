@@ -4,12 +4,6 @@ variable "allowed_cidr" {
   default     = "0.0.0.0/0"  # Replace with your IP range
 }
 
-variable "private_key_path" {
-  description = "Path to the SSH private key"
-  type        = string
-  sensitive   = true
-}
-
 variable "rds_endpoint" {
   description = "RDS endpoint"
   type        = string

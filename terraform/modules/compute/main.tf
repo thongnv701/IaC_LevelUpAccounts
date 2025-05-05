@@ -1,3 +1,8 @@
+resource "local_file" "private_key" {
+  content  = var.private_key_content
+  filename = "${path.module}/private_key.pem"
+}
+
 resource "aws_instance" "k3s_master" {
   ami                         = var.ami
   instance_type               = var.instance_type
@@ -25,7 +30,7 @@ resource "null_resource" "fetch_kubeconfig" {
     type        = "ssh"
     host        = aws_instance.k3s_master.public_ip
     user        = "ec2-user" # <-- use ec2-user for Amazon Linux
-    private_key = file(var.private_key_path)
+    private_key = var.private_key_content
   }
   inline = [
     "set -e",
@@ -39,7 +44,7 @@ resource "null_resource" "fetch_kubeconfig" {
   ]
   }
   provisioner "local-exec" {
-    command = "scp -o StrictHostKeyChecking=no -i ${var.private_key_path} ec2-user@${aws_instance.k3s_master.public_ip}:/home/ec2-user/kubeconfig ${path.module}/kubeconfig"
+    command = "scp -o StrictHostKeyChecking=no -i ${local_file.private_key.filename} ec2-user@${aws_instance.k3s_master.public_ip}:/home/ec2-user/kubeconfig ${path.module}/kubeconfig"
   }
 }
 

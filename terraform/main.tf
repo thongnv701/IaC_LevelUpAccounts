@@ -13,7 +13,6 @@ module "compute" {
   key_name           = "aws-keypair-2"
   subnet_id          = module.network.subnet_id
   security_group_id  = module.network.security_group_id
-  private_key_path   = var.private_key_path
   private_key_content = var.private_key_content
   master_user_data   = <<-EOF
     #!/bin/bash
@@ -110,14 +109,12 @@ module "kubernetes" {
   }
 }
 
-
-
 // Add this temporarily to main.tf to test the Helm provider
 # modules/kubernetes/main.tf
 # ArgoCD Helm Chart
 resource "null_resource" "wait_for_coredns" {
   provisioner "local-exec" {
-    interpreter = ["powershell", "-Command"]
+    interpreter = ["bash", "-c"]
     command     = "kubectl --kubeconfig=${abspath(path.root)}/modules/compute/kubeconfig -n kube-system wait --for=condition=Ready --timeout=300s pod -l k8s-app=kube-dns"
   }
 }

@@ -1,0 +1,50 @@
+name: Terraform CI/CD
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  terraform:
+    runs-on: ubuntu-latest
+
+    env:
+      TF_VAR_allowed_cidr: ${{ secrets.ALLOWED_CIDR }}
+      # For file paths, note that the runner must have access to that file.
+      # Generally you'll store the private_key_content rather than a file path,
+      # and then have a step that writes it to disk if needed.
+      TF_VAR_private_key_content: ${{ secrets.PRIVATE_KEY_CONTENT }}
+      TF_VAR_rds_endpoint: ${{ secrets.RDS_ENDPOINT }}
+      TF_VAR_rds_username: ${{ secrets.RDS_USERNAME }}
+      TF_VAR_rds_password: ${{ secrets.RDS_PASSWORD }}
+      # If you have other variables that aren't sensitive, you can pass those too.
+      # Optionally, TF_VAR_private_key_path if your runner has this file.
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      AWS_DEFAULT_REGION: "ap-southeast-1"
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v1
+        with:
+          terraform_version: "1.3.0"
+
+      - name: Terraform Init
+        working-directory: ./terraform
+        run: terraform init
+
+      - name: Terraform Plan
+        working-directory: ./terraform
+        run: terraform plan -out=tfplan
+
+      - name: Terraform Apply
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        working-directory: ./terraform
+        run: terraform apply -auto-approve tfplan
