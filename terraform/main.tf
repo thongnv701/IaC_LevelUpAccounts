@@ -93,18 +93,18 @@ provider "kubernetes" {
   config_path = "${abspath(path.root)}/modules/compute/kubeconfig"
 }
 
-module "kubernetes" {
-  source      = "./modules/kubernetes"
-  rds_password = var.rds_password
-  rds_username = var.rds_username
-  rds_endpoint = var.rds_endpoint
-  # depends_on = [
-  #   null_resource.wait_for_cluster
-  # ]
-  providers = {
-    kubernetes.with_config = kubernetes.with_config
-  }
-}
+# module "kubernetes" {
+#   source      = "./modules/kubernetes"
+#   rds_password = var.rds_password
+#   rds_username = var.rds_username
+#   rds_endpoint = var.rds_endpoint
+#   # depends_on = [
+#   #   null_resource.wait_for_cluster
+#   # ]
+#   providers = {
+#     kubernetes.with_config = kubernetes.with_config
+#   }
+# }
 
 // Add this temporarily to main.tf to test the Helm provider
 # modules/kubernetes/main.tf
