@@ -1,3 +1,7 @@
+provider "aws" {
+  region = "ap-southeast-1"
+}
+
 module "network" {
   source            = "./modules/network"
   vpc_cidr          = "10.0.0.0/16"
@@ -128,6 +132,6 @@ module "monitoring" {
     null_resource.wait_for_coredns
   ]
   providers = {
-    helm.with_config = helm.with_config
+    helm = helm.with_config
   }
 }
