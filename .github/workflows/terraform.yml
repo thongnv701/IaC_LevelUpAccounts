@@ -52,6 +52,9 @@ jobs:
         working-directory: ./terraform
         run: terraform apply -auto-approve tfplan
 
+      - name: List compute module files
+        run: ls -l ./terraform/modules/compute/
+
       - name: Upload kubeconfig
         uses: actions/upload-artifact@v4
         with:
