@@ -52,6 +52,9 @@ jobs:
         working-directory: ./terraform
         run: terraform apply -auto-approve tfplan
 
+      - name: Show fetch_kubeconfig log if exists
+        run: cat ./terraform/modules/compute/fetch_kubeconfig.log || true
+
       - name: List compute module files
         run: ls -l ./terraform/modules/compute/
 
