@@ -1,22 +1,19 @@
+# IaC_LevelUpAccounts/apps/network-policies-app.yaml
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: app-of-apps
+  name: network-policies
   namespace: argocd
 spec:
   project: default
   source:
-    repoURL: https://github.com/thongnv701/IaC_LevelUpAccounts.git
-    targetRevision: main
-    path: apps
+    repoURL: https://github.com/your-repo/IaC_LevelUpAccounts.git
+    path: manifests/network-policies
+    targetRevision: HEAD
   destination:
     server: https://kubernetes.default.svc
     namespace: argocd
   syncPolicy:
-    syncOptions:
-      - CreateNamespace=true
-
     automated:
-      selfHeal: true
       prune: true
-      allowEmpty: false
+      selfHeal: true

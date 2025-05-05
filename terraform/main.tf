@@ -85,22 +85,6 @@ module "compute" {
   kubeconfig_fetch_script = file("${path.module}/kubeconfig_fetch.sh")
 }
 
-# resource "null_resource" "wait_for_cluster" {
-#   provisioner "local-exec" {
-#     interpreter = ["bash", "-c"]
-#     command = <<-EOT
-#       for i in {1..30}; do
-#         echo "Checking if cluster is ready..."
-#         kubectl --kubeconfig=./modules/compute/kubeconfig get nodes && exit 0
-#         sleep 10
-#       done
-#       echo "Cluster not ready after timeout"
-#       exit 1
-#     EOT
-#   }
-#   depends_on = [module.compute]
-# }
-
 provider "kubernetes" {
   alias       = "with_config"
   config_path = "${abspath(path.root)}/modules/compute/kubeconfig"
@@ -126,53 +110,27 @@ module "kubernetes" {
   }
 }
 
-# module "monitoring" {
-#   source = "./modules/monitoring"
-#   rds_endpoint = var.rds_endpoint
-#   rds_username = var.rds_username
-#   depends_on = [
-#     module.kubernetes,
-#     null_resource.wait_for_cluster
-#   ]
-#   providers = {
-#     helm.with_config = helm.with_config
-#   }
-# }
 
 
 // Add this temporarily to main.tf to test the Helm provider
 # modules/kubernetes/main.tf
-
-resource "helm_release" "nginx" {
-  provider   = helm.with_config
-  name       = "nginx"
-  repository = "https://charts.bitnami.com/bitnami"
-  chart      = "nginx"
-  version    = "18.2.2"  # Latest stable version
-  namespace  = "default"
-  timeout    = 600       # Increase timeout for stability
-  wait       = true      # Wait for resources to be ready
-}
-
-resource "helm_release" "argocd" {
-  provider         = helm.with_config
-  name             = "argocd"
-  repository       = "https://argoproj.github.io/argo-helm"
-  chart            = "argo-cd"
-  version          = "7.6.0"  # Latest stable version
-  namespace        = "argocd"
-  create_namespace = true
-  timeout          = 600
-  wait             = true
-}
-
-# wait for argocd server and redis to be ready
-resource "null_resource" "wait_for_argocd" {
-  depends_on = [
-    helm_release.argocd
-  ]
+# ArgoCD Helm Chart
+resource "null_resource" "wait_for_coredns" {
   provisioner "local-exec" {
     interpreter = ["powershell", "-Command"]
-    command = "kubectl --kubeconfig=${abspath(path.root)}/modules/compute/kubeconfig -n argocd wait --for=condition=Available --timeout=300s deployment/argocd-server; if ($LASTEXITCODE -eq 0) { kubectl --kubeconfig=${abspath(path.root)}/modules/compute/kubeconfig -n argocd wait --for=condition=Ready --timeout=300s pod -l app.kubernetes.io/name=argocd-redis }"
+    command     = "kubectl --kubeconfig=${abspath(path.root)}/modules/compute/kubeconfig -n kube-system wait --for=condition=Ready --timeout=300s pod -l k8s-app=kube-dns"
+  }
+}
+
+module "monitoring" {
+  source = "./modules/monitoring"
+  rds_endpoint = var.rds_endpoint
+  rds_username = var.rds_username
+  depends_on = [
+    module.kubernetes,
+    null_resource.wait_for_coredns
+  ]
+  providers = {
+    helm.with_config = helm.with_config
   }
 }

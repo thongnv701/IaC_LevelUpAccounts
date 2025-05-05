@@ -1,17 +1,41 @@
-server:
-  resources:
-    requests:
-      cpu: "100m"
-      memory: "128Mi"
-    limits:
-      cpu: "200m"
-      memory: "256Mi"
+global:
+  domain: argocd.thongit.space
 
-controller:
-  resources:
-    requests:
-      cpu: "100m"
-      memory: "128Mi"
-    limits:
-      cpu: "200m"
-      memory: "256Mi"
+fullnameOverride: argocd
+
+crds:
+  install: true
+
+redis:
+  enabled: true
+
+repoServer:
+  replicas: 1
+
+applicationSet:
+  enabled: true
+  replicas: 1
+
+dex:
+  enabled: true
+  extraArgs:
+    - --disable-tls 
+
+server:
+  extraArgs: 
+    - --dex-server
+    - http://argocd-dex-server.argocd.svc.cluster.local:5556
+    - --dex-server-plaintext 
+  replicas: 1
+  ingress:
+    enabled: false
+    ingressClassName: nginx
+
+configs:
+  cm:
+    url: http://argocd.thongit.space
+    exec.enabled: true
+    admin.enabled: true
+
+  params:
+    server.insecure: true
