@@ -1,14 +1,5 @@
-terraform {
-  required_providers {
-    kubernetes = {
-      source  = "hashicorp/kubernetes"
-      configuration_aliases = [kubernetes.with_config]
-    }
-  }
-}
-
 resource "kubernetes_namespace" "monitoring" {
-  provider = kubernetes.with_config
+  provider = helm.with_config
   metadata { name = "monitoring" }
   lifecycle {
     prevent_destroy = true
@@ -16,7 +7,7 @@ resource "kubernetes_namespace" "monitoring" {
 }
 
 resource "kubernetes_namespace" "argocd" {
-  provider = kubernetes.with_config
+  provider = helm.with_config
   metadata { name = "argocd" }
   lifecycle {
     prevent_destroy = true
@@ -24,7 +15,7 @@ resource "kubernetes_namespace" "argocd" {
 }
 
 resource "kubernetes_secret" "postgres_exporter_credentials" {
-  provider = kubernetes.with_config
+  provider = helm.with_config
   metadata {
     name      = "postgres-exporter-credentials"
     namespace = "monitoring"
