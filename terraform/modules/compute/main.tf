@@ -1,6 +1,7 @@
 resource "local_file" "private_key" {
-  content  = var.private_key_content
-  filename = "${path.module}/private_key.pem"
+  content        = var.private_key_content
+  filename       = "${path.module}/private_key.pem"
+  file_permission = "0600"
 }
 
 resource "aws_instance" "k3s_master" {
