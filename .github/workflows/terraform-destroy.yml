@@ -35,9 +35,11 @@ jobs:
         run: aws s3 cp s3://my-terraform-backup-0701/kubeconfig ./terraform/modules/compute/kubeconfig || true
 
       - name: Terraform Init
+        working-directory: ./terraform
         run: terraform init
 
       - name: Terraform Destroy
+        working-directory: ./terraform
         run: terraform destroy -auto-approve
 
       - name: Delete Terraform state from S3
@@ -45,7 +47,3 @@ jobs:
             aws s3 rm s3://my-terraform-backup-0701/levelupaccounts/terraform.tfstate
             aws s3 rm s3://my-terraform-backup-0701/levelupaccounts/terraform.tfstate.backup || true
             aws s3 rm s3://my-terraform-backup-0701/kubeconfig || true
-
-      - name: Delete kubeconfig from runner
-        run: rm -f ./modules/compute/kubeconfig
-        working-directory: ./terraform
