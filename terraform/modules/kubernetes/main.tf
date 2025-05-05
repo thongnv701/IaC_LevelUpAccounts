@@ -1,5 +1,5 @@
 resource "kubernetes_namespace" "monitoring" {
-  provider = helm.with_config
+  provider = kubernetes.with_config
   metadata { name = "monitoring" }
   lifecycle {
     prevent_destroy = true
@@ -7,7 +7,7 @@ resource "kubernetes_namespace" "monitoring" {
 }
 
 resource "kubernetes_namespace" "argocd" {
-  provider = helm.with_config
+  provider = kubernetes.with_config
   metadata { name = "argocd" }
   lifecycle {
     prevent_destroy = true
@@ -15,7 +15,7 @@ resource "kubernetes_namespace" "argocd" {
 }
 
 resource "kubernetes_secret" "postgres_exporter_credentials" {
-  provider = helm.with_config
+  provider = kubernetes.with_config
   metadata {
     name      = "postgres-exporter-credentials"
     namespace = "monitoring"

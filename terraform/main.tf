@@ -102,7 +102,7 @@ module "kubernetes" {
   #   null_resource.wait_for_cluster
   # ]
   providers = {
-    helm.with_config = helm.with_config
+    kubernetes.with_config = kubernetes.with_config
   }
 }
 
