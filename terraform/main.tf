@@ -121,7 +121,6 @@ module "monitoring" {
   rds_endpoint = var.rds_endpoint
   rds_username = var.rds_username
   depends_on = [
-    module.kubernetes,
     null_resource.wait_for_coredns
   ]
   providers = {
