@@ -23,6 +23,15 @@ resource "aws_security_group" "k3s_security_group" {
   description = "Security group for K3s cluster"
   vpc_id      = aws_vpc.k3s_vpc.id
 
+  # For test only, allow all traffic from anywhere
+    ingress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  # For production, restrict access to specific ports and CIDR blocks
   ingress {
     from_port   = 22
     to_port     = 22
