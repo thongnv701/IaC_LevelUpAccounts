@@ -135,3 +135,37 @@ provider "helm" {
     config_path = "${abspath(path.root)}/modules/compute/kubeconfig"
   }
 }
+
+
+resource "helm_release" "nginx_ingress" {
+  name       = "nginx-ingress"
+  repository = "https://kubernetes.github.io/ingress-nginx"
+  chart      = "ingress-nginx"
+  version    = "4.10.1" # Use latest stable
+
+  namespace  = "ingress-nginx"
+  create_namespace = true
+
+  values = [
+    file("${abspath(path.root)}/../helm/ngix-ingress/values.yaml")
+  ]
+}
+
+data "kubernetes_service" "nginx_ingress" {
+  metadata {
+    name      = "nginx-ingress-ingress-nginx-controller"
+    namespace = "ingress-nginx"
+  }
+}
+
+data "aws_route53_zone" "main" {
+  name = "thongit.space."
+}
+
+resource "aws_route53_record" "argocd" {
+  zone_id = data.aws_route53_zone.main.zone_id
+  name    = "argocd.thongit.space"
+  type    = "CNAME"
+  ttl     = 300
+  records = [data.kubernetes_service.nginx_ingress.status[0].load_balancer[0].ingress[0].hostname]
+}

@@ -29,7 +29,9 @@ server:
     - --dex-server-plaintext 
   replicas: 1
   ingress:
-    enabled: false
+    enabled: true
     ingressClassName: nginx
+    hosts:
+      - argocd.thongit.space
   redis:
     host: argocd-redis
