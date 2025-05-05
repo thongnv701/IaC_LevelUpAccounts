@@ -31,7 +31,7 @@ jobs:
             chmod +x kubectl
             sudo mv kubectl /usr/local/bin/
 
-        - name: Apply app-of-app.yaml
+        - name: Apply app-of-apps.yaml
           env:
             KUBECONFIG: ${{ github.workspace }}/kubeconfig
-          run: kubectl apply -f ./app-of-apps.yaml
+          run: kubectl apply -f ./apps/app-of-apps.yaml
