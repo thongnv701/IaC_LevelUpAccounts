@@ -10,11 +10,17 @@ terraform {
 resource "kubernetes_namespace" "monitoring" {
   provider = kubernetes.with_config
   metadata { name = "monitoring" }
+  lifecycle {
+    prevent_destroy = true
+  }
 }
 
 resource "kubernetes_namespace" "argocd" {
   provider = kubernetes.with_config
   metadata { name = "argocd" }
+  lifecycle {
+    prevent_destroy = true
+  }
 }
 
 resource "kubernetes_secret" "postgres_exporter_credentials" {
@@ -22,6 +28,9 @@ resource "kubernetes_secret" "postgres_exporter_credentials" {
   metadata {
     name      = "postgres-exporter-credentials"
     namespace = "monitoring"
+  }
+  lifecycle {
+    prevent_destroy = true
   }
   data = {
     password = var.rds_password
