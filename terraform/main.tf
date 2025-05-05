@@ -93,13 +93,6 @@ provider "kubernetes" {
   config_path = "${abspath(path.root)}/modules/compute/kubeconfig"
 }
 
-provider "helm" {
-  alias = "with_config"
-  kubernetes {
-    config_path = "${abspath(path.root)}/modules/compute/kubeconfig"
-  }
-}
-
 module "kubernetes" {
   source      = "./modules/kubernetes"
   rds_password = var.rds_password
@@ -132,6 +125,13 @@ module "monitoring" {
     null_resource.wait_for_coredns
   ]
   providers = {
-    helm = helm.with_config
+    helm.with_config = helm.with_config
+  }
+}
+
+provider "helm" {
+  alias = "with_config"
+  kubernetes {
+    config_path = "${abspath(path.root)}/modules/compute/kubeconfig"
   }
 }
