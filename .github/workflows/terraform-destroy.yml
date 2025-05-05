@@ -41,6 +41,7 @@ jobs:
         run: |
             aws s3 rm s3://my-terraform-backup-0701/levelupaccounts/terraform.tfstate
             aws s3 rm s3://my-terraform-backup-0701/levelupaccounts/terraform.tfstate.backup || true
+            aws s3 rm s3://my-terraform-backup-0701/kubeconfig || true
 
       - name: Delete kubeconfig from runner
         run: rm -f ./modules/compute/kubeconfig
