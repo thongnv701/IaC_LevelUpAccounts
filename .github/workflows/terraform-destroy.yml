@@ -46,6 +46,7 @@ jobs:
           ls -l ./terraform/modules/compute/
           cat ./terraform/modules/compute/kubeconfig || true
       - name: Terraform Destroy
+        continue-on-error: true
         working-directory: ./terraform
         run: terraform destroy -auto-approve
 
