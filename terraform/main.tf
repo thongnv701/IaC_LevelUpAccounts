@@ -160,9 +160,6 @@ resource "null_resource" "wait_for_nginx_ingress" {
   provisioner "local-exec" {
     command = "kubectl --kubeconfig=${abspath(path.root)}/modules/compute/kubeconfig -n ingress-nginx wait --for=condition=available --timeout=300s deployment/nginx-ingress-ingress-nginx-controller"
   }
-  lifecycle {
-    prevent_destroy = true
-  }
 }
 
 
