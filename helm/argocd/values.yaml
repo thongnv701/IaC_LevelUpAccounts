@@ -32,6 +32,8 @@ server:
     ingressClassName: nginx
     hosts:
       - ""
+    paths:
+      - /
 
 configs:
   cm:
