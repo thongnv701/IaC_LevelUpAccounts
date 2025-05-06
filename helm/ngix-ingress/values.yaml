@@ -1,6 +1,9 @@
 controller:
   service:
-    type: LoadBalancer
+    type: NodePort
+    nodePorts:
+      http: 30080
+      https: 30443
   admissionWebhooks:
     enabled: true
     patch:
