@@ -54,7 +54,7 @@ resource "null_resource" "wait_for_nginx_ingress" {
 
 
 data "kubernetes_service" "nginx_ingress" {
-  provider = kubernetes.with_config
+  provider = helm.with_config
   depends_on = [null_resource.wait_for_nginx_ingress]
   metadata {
     name      = "nginx-ingress-ingress-nginx-controller"
