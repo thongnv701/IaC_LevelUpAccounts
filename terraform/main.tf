@@ -149,9 +149,6 @@ resource "helm_release" "nginx_ingress" {
   values = [
     file("${abspath(path.root)}/../helm/ngix-ingress/values.yaml")
   ]
-  lifecycle {
-    prevent_destroy = true
-  }
 }
 
 
