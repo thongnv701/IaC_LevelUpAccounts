@@ -36,6 +36,10 @@ server:
     ingressClassName: nginx
     hosts:
       - argocd.thongit.space
+    extraHosts:
+      - host: argocd.thongit.space
+        paths:
+          - /
     paths:
       - /
     tls:
