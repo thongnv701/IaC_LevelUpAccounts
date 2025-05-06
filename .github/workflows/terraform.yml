@@ -39,9 +39,9 @@ jobs:
         working-directory: ./terraform
         run: terraform init
 
-      - name: Terraform Plan
-        working-directory: ./terraform
-        run: terraform plan -out=tfplan
+      # - name: Terraform Plan
+      #   working-directory: ./terraform
+      #   run: terraform plan -out=tfplan
 
       - name: Terraform Apply
         continue-on-error: true
