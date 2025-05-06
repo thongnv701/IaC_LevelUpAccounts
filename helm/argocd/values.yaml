@@ -2,7 +2,10 @@ fullnameOverride: argocd
 
 crds:
   install: true
-
+configs:
+  params:
+    server.host: argocd.thongit.space
+    
 redis:
   enabled: true
   image:
