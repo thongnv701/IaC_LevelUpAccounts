@@ -35,13 +35,13 @@ server:
     enabled: true
     ingressClassName: nginx
     hosts:
-      - argocd.thongit.space
+      - ""
     paths:
       - /
-    extraHosts:
-      - host: argocd.thongit.space
-        paths:
-          - /
+    # extraHosts:
+    #   - name: argocd.thongit.space
+    #     paths:
+    #       - /
     tls:
       - secretName: argocd-tls-certificate
         hosts:
