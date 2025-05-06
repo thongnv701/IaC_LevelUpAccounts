@@ -30,6 +30,8 @@ server:
   ingress:
     enabled: true
     ingressClassName: nginx
+    hosts:
+      - ""
 
 configs:
   cm:
