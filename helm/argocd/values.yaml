@@ -35,5 +35,9 @@ server:
       - argocd.thongit.space
     paths:
       - /
+    tls:
+      - secretName: argocd-tls-certificate
+        hosts:
+          - argocd.thongit.space
   redis:
     host: argocd-redis

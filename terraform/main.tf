@@ -168,6 +168,14 @@ data "kubernetes_service" "nginx_ingress" {
   }
 }
 
+# Get the Load Balancer hostname from the Nginx Ingress Controller service
+locals {
+  load_balancer_hostname = data.kubernetes_service.nginx_ingress.status.0.load_balancer.0.ingress.0.hostname
+  # If hostname is empty, use IP address
+  load_balancer_ip = try(data.kubernetes_service.nginx_ingress.status.0.load_balancer.0.ingress.0.ip, "")
+  load_balancer_endpoint = coalesce(local.load_balancer_hostname, local.load_balancer_ip)
+}
+
 
 resource "helm_release" "argocd" {
   provider         = helm.with_config
@@ -199,4 +207,19 @@ resource "null_resource" "wait_for_argocd" {
       kubectl --kubeconfig=${abspath(path.root)}/modules/compute/kubeconfig -n argocd wait --for=condition=Ready --timeout=300s pod -l app.kubernetes.io/name=argocd-redis
     EOC
   }
+}
+
+# Add Route 53 configuration
+resource "aws_route53_record" "argocd" {
+  zone_id = var.route53_zone_id # You'll need to add this variable
+  name    = "argocd.thongit.space"
+  type    = "A"
+  
+  alias {
+    name                   = local.load_balancer_hostname
+    zone_id                = var.route53_elb_zone_id # You'll need to add this variable
+    evaluate_target_health = true
+  }
+  
+  depends_on = [data.kubernetes_service.nginx_ingress, null_resource.wait_for_argocd]
 }

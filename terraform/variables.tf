@@ -22,3 +22,15 @@ variable "rds_password" {
 variable "private_key_content" {
   sensitive   = true
 }
+
+variable "route53_zone_id" {
+  description = "The Route 53 hosted zone ID for thongit.space domain"
+  type        = string
+}
+
+variable "route53_elb_zone_id" {
+  description = "The Route 53 zone ID for the AWS region's ELB service (fixed value per AWS region)"
+  type        = string
+  # Default value for ap-southeast-1 (Singapore) region
+  default     = "Z1LMS91P8CMLE5"
+}
