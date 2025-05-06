@@ -30,10 +30,19 @@ server:
   ingress:
     enabled: true
     ingressClassName: nginx
+    annotations:
+      nginx.ingress.kubernetes.io/backend-protocol: "HTTPS"
+      nginx.ingress.kubernetes.io/ssl-passthrough: "true"
+      nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+      cert-manager.io/cluster-issuer: "letsencrypt-prod"  # Only if using cert-manager
     hosts:
-      - ""
+      - argocd.thongit.space  # Explicit hostname
     paths:
       - /
+    tls:
+      - hosts:
+          - argocd.thongit.space
+        secretName: argocd-tls
 
 configs:
   cm:
@@ -42,4 +51,8 @@ configs:
     admin.enabled: true
 
   params:
-    server.insecure: true
+    server.insecure: false  # Should be false when using TLS
+
+controller:
+  metrics:
+    enabled: true
