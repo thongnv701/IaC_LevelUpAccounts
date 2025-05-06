@@ -28,40 +28,6 @@ resource "null_resource" "wait_for_argocd" {
   }
 }
 
-
-resource "helm_release" "nginx_ingress" {
-  provider   = helm.with_config
-  name       = "nginx-ingress"
-  repository = "https://kubernetes.github.io/ingress-nginx"
-  chart      = "ingress-nginx"
-  version    = "4.10.1" # Use latest stable
-
-  namespace  = "ingress-nginx"
-  create_namespace = true
-
-  values = [
-    file("${abspath(path.root)}/../helm/ngix-ingress/values.yaml")
-  ]
-}
-
-
-resource "null_resource" "wait_for_nginx_ingress" {
-  depends_on = [helm_release.nginx_ingress]
-  provisioner "local-exec" {
-    command = "kubectl --kubeconfig=${abspath(path.root)}/modules/compute/kubeconfig -n ingress-nginx wait --for=condition=available --timeout=300s deployment/nginx-ingress-ingress-nginx-controller"
-  }
-}
-
-
-data "kubernetes_service" "nginx_ingress" {
-  provider = helm.with_config
-  depends_on = [null_resource.wait_for_nginx_ingress]
-  metadata {
-    name      = "nginx-ingress-ingress-nginx-controller"
-    namespace = "ingress-nginx"
-  }
-}
-
 # data "aws_route53_zone" "main" {
 #   name = "thongit.space."
 # }
