@@ -46,7 +46,7 @@ jobs:
       - name: Terraform Apply
         continue-on-error: true
         working-directory: ./terraform
-        run: terraform apply -auto-approve tfplan
+        run: terraform apply -auto-approve
 
       - name: List compute module files
         run: ls -l ./terraform/modules/compute/
