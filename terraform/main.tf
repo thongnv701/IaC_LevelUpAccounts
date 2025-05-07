@@ -235,7 +235,7 @@ resource "helm_release" "argocd" {
   ]
 
   depends_on = [
-    helm_release.wait_for_nginx_ingress
+    null_resource.wait_for_nginx_ingress
   ]
 }
 
