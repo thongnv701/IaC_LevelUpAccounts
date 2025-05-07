@@ -166,7 +166,7 @@ resource "helm_release" "prometheus_operator" {
 resource "null_resource" "wait_for_prometheus_operator" {
   depends_on = [helm_release.prometheus_operator]
   provisioner "local-exec" {
-    command = "kubectl --kubeconfig=${abspath(path.root)}/modules/compute/kubeconfig -n monitoring wait --for=condition=ready pod -l app=prometheus-operator --timeout=300s || kubectl --kubeconfig=${abspath(path.root)}/modules/compute/kubeconfig -n monitoring wait --for=condition=ready pod -l app.kubernetes.io/name=prometheus-operator --timeout=300s"
+    command = "kubectl --kubeconfig=${abspath(path.root)}/modules/compute/kubeconfig -n monitoring wait --for=condition=ready pod -l app=kube-prometheus-stack-operator --timeout=300s"
   }
 }
 
