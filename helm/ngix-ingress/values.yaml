@@ -6,9 +6,9 @@ controller:
       service.beta.kubernetes.io/aws-load-balancer-internal: "false"
       service.beta.kubernetes.io/aws-load-balancer-scheme: "internet-facing"
   admissionWebhooks:
-    enabled: true
+    enabled: false
     patch:
-      enabled: true
+      enabled: false
   config:
     use-forwarded-headers: "true"
     compute-full-forwarded-for: "true"
@@ -17,3 +17,6 @@ controller:
     enabled: true
     serviceMonitor:
       enabled: true
+      namespace: monitoring
+      additionalLabels:
+        release: prometheus-operator

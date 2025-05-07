@@ -178,7 +178,7 @@ resource "helm_release" "nginx_ingress" {
   version    = "4.10.1"
   namespace  = "ingress-nginx"
   create_namespace = true
-  timeout    = 600  # Add timeout
+  timeout    = 600
 
   values = [
     file("${abspath(path.root)}/../helm/ngix-ingress/values.yaml")
@@ -194,11 +194,37 @@ resource "helm_release" "nginx_ingress" {
   atomic = true
 }
 
+# Add a wait for the NGINX Ingress Controller to be ready
 resource "null_resource" "wait_for_nginx_ingress" {
   depends_on = [helm_release.nginx_ingress]
   provisioner "local-exec" {
-    command = "kubectl --kubeconfig=${abspath(path.root)}/modules/compute/kubeconfig -n ingress-nginx wait --for=condition=available --timeout=300s deployment/nginx-ingress-ingress-nginx-controller"
+    command = "kubectl --kubeconfig=${abspath(path.root)}/modules/compute/kubeconfig -n ingress-nginx wait --for=condition=ready pod -l app.kubernetes.io/component=controller --timeout=300s"
   }
+}
+
+# After NGINX is ready, enable the admission webhook
+resource "helm_release" "nginx_ingress_admission" {
+  provider   = helm.with_config
+  name       = "nginx-ingress-admission"
+  repository = "https://kubernetes.github.io/ingress-nginx"
+  chart      = "ingress-nginx"
+  version    = "4.10.1"
+  namespace  = "ingress-nginx"
+  timeout    = 600
+
+  values = [
+    <<-EOF
+    controller:
+      admissionWebhooks:
+        enabled: true
+        patch:
+          enabled: true
+    EOF
+  ]
+
+  depends_on = [
+    null_resource.wait_for_nginx_ingress
+  ]
 }
 
 data "kubernetes_service" "nginx_ingress" {
@@ -233,7 +259,9 @@ resource "helm_release" "argocd" {
     file("${abspath(path.root)}/../helm/argocd/values.yaml")
   ]
 
-  depends_on = [helm_release.nginx_ingress]
+  depends_on = [
+    helm_release.nginx_ingress_admission
+  ]
 }
 
 # wait for argocd server and redis to be ready
