@@ -8,20 +8,12 @@ resource "aws_vpc" "k3s_vpc" {
   }
 }
 
-resource "aws_subnet" "k3s_subnet" {
-  vpc_id            = aws_vpc.k3s_vpc.id
-  cidr_block        = var.subnet_cidr
-  availability_zone = var.availability_zone
-
-  tags = {
-    Name = "k3s-subnet"
-  }
-}
-
 resource "aws_subnet" "k3s_subnet_1" {
   vpc_id            = aws_vpc.k3s_vpc.id
-  cidr_block        = cidrsubnet(var.vpc_cidr, 8, 1) # e.g., 10.0.1.0/24
-  availability_zone = "ap-southeast-1a"  # Use explicit AZ
+  cidr_block        = cidrsubnet(var.vpc_cidr, 8, 1)  # 10.0.1.0/24
+  availability_zone = var.availability_zones[0]
+  map_public_ip_on_launch = true
+
   tags = {
     Name = "k3s-subnet-1"
   }
@@ -29,8 +21,10 @@ resource "aws_subnet" "k3s_subnet_1" {
 
 resource "aws_subnet" "k3s_subnet_2" {
   vpc_id            = aws_vpc.k3s_vpc.id
-  cidr_block        = cidrsubnet(var.vpc_cidr, 8, 2) # e.g., 10.0.2.0/24
-  availability_zone = "ap-southeast-1b"  # Use explicit AZ
+  cidr_block        = cidrsubnet(var.vpc_cidr, 8, 2)  # 10.0.2.0/24
+  availability_zone = var.availability_zones[1]
+  map_public_ip_on_launch = true
+
   tags = {
     Name = "k3s-subnet-2"
   }
@@ -41,45 +35,42 @@ resource "aws_security_group" "k3s_security_group" {
   description = "Security group for K3s cluster"
   vpc_id      = aws_vpc.k3s_vpc.id
 
-  # For test only, allow all traffic from anywhere
-    ingress {
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  # For production, restrict access to specific ports and CIDR blocks
+  # For production, restrict these rules
   ingress {
     from_port   = 22
     to_port     = 22
     protocol    = "tcp"
     cidr_blocks = [var.allowed_cidr]
   }
+
   ingress {
     from_port   = 6443
     to_port     = 6443
     protocol    = "tcp"
     cidr_blocks = [var.allowed_cidr]
   }
+
   ingress {
     from_port   = 80
     to_port     = 80
     protocol    = "tcp"
     cidr_blocks = [var.allowed_cidr]
   }
+
   ingress {
     from_port   = 443
     to_port     = 443
     protocol    = "tcp"
     cidr_blocks = [var.allowed_cidr]
   }
+
   egress {
     from_port   = 0
     to_port     = 0
     protocol    = "-1"
     cidr_blocks = ["0.0.0.0/0"]
   }
+
   tags = {
     Name = "k3s-security-group"
   }
@@ -87,7 +78,9 @@ resource "aws_security_group" "k3s_security_group" {
 
 resource "aws_internet_gateway" "k3s_igw" {
   vpc_id = aws_vpc.k3s_vpc.id
-  tags = { Name = "k3s-igw" }
+  tags = { 
+    Name = "k3s-igw" 
+  }
 }
 
 resource "aws_route_table" "k3s_public" {
@@ -96,7 +89,9 @@ resource "aws_route_table" "k3s_public" {
     cidr_block = "0.0.0.0/0"
     gateway_id = aws_internet_gateway.k3s_igw.id
   }
-  tags = { Name = "k3s-public-rt" }
+  tags = { 
+    Name = "k3s-public-rt" 
+  }
 }
 
 resource "aws_route_table_association" "k3s_subnet_1_assoc" {

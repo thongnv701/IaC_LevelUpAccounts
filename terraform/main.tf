@@ -3,10 +3,9 @@ provider "aws" {
 }
 
 module "network" {
-  source            = "./modules/network"
+  source             = "./modules/network"
   vpc_cidr          = "10.0.0.0/16"
-  subnet_cidr       = "10.0.1.0/24"
-  availability_zone = "ap-southeast-1a"
+  availability_zones = ["ap-southeast-1a", "ap-southeast-1b"]
   allowed_cidr      = var.allowed_cidr
 }
 
