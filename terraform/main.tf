@@ -120,10 +120,11 @@ module "monitoring" {
   rds_endpoint = var.rds_endpoint
   rds_username = var.rds_username
   depends_on = [
-    null_resource.wait_for_coredns
+    null_resource.wait_for_coredns,
+    null_resource.wait_for_prometheus_operator
   ]
   providers = {
-    helm.with_config = helm.with_config
+    helm = helm.with_config
   }
 }
 
@@ -139,13 +140,13 @@ resource "helm_release" "prometheus_operator" {
   name       = "prometheus-operator"
   repository = "https://prometheus-community.github.io/helm-charts"
   chart      = "kube-prometheus-stack"
-  version    = "55.5.0"  # Use a stable version
+  version    = "55.5.0"
   namespace  = "monitoring"
   create_namespace = true
 
   set {
     name  = "grafana.enabled"
-    value = "false"  # Disable Grafana if you don't need it
+    value = "false"
   }
 
   set {
@@ -157,12 +158,15 @@ resource "helm_release" "prometheus_operator" {
     name  = "prometheus.serviceMonitor.selfMonitor"
     value = "true"
   }
+
+  # Add timeout to prevent long waits
+  timeout = 600
 }
 
 resource "null_resource" "wait_for_prometheus_operator" {
   depends_on = [helm_release.prometheus_operator]
   provisioner "local-exec" {
-    command = "kubectl --kubeconfig=${abspath(path.root)}/modules/compute/kubeconfig -n monitoring wait --for=condition=ready pod -l app.kubernetes.io/name=prometheus-operator --timeout=300s"
+    command = "kubectl --kubeconfig=${abspath(path.root)}/modules/compute/kubeconfig -n monitoring wait --for=condition=ready pod -l app=prometheus-operator --timeout=300s || kubectl --kubeconfig=${abspath(path.root)}/modules/compute/kubeconfig -n monitoring wait --for=condition=ready pod -l app.kubernetes.io/name=prometheus-operator --timeout=300s"
   }
 }
 
@@ -174,6 +178,7 @@ resource "helm_release" "nginx_ingress" {
   version    = "4.10.1"
   namespace  = "ingress-nginx"
   create_namespace = true
+  timeout    = 600  # Add timeout
 
   values = [
     file("${abspath(path.root)}/../helm/ngix-ingress/values.yaml")
@@ -182,6 +187,11 @@ resource "helm_release" "nginx_ingress" {
   depends_on = [
     null_resource.wait_for_prometheus_operator
   ]
+
+  # Add retry logic
+  wait = true
+  wait_for_jobs = true
+  atomic = true
 }
 
 resource "null_resource" "wait_for_nginx_ingress" {
