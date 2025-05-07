@@ -21,7 +21,7 @@ resource "aws_subnet" "k3s_subnet" {
 resource "aws_subnet" "k3s_subnet_1" {
   vpc_id            = aws_vpc.k3s_vpc.id
   cidr_block        = cidrsubnet(var.vpc_cidr, 8, 1) # e.g., 10.0.1.0/24
-  availability_zone = "${var.availability_zone}a" # Different AZ than your first subnet
+  availability_zone = "ap-southeast-1a"  # Use explicit AZ
   tags = {
     Name = "k3s-subnet-1"
   }
@@ -30,7 +30,7 @@ resource "aws_subnet" "k3s_subnet_1" {
 resource "aws_subnet" "k3s_subnet_2" {
   vpc_id            = aws_vpc.k3s_vpc.id
   cidr_block        = cidrsubnet(var.vpc_cidr, 8, 2) # e.g., 10.0.2.0/24
-  availability_zone = "${var.availability_zone}b" # Different AZ than your first subnet
+  availability_zone = "ap-southeast-1b"  # Use explicit AZ
   tags = {
     Name = "k3s-subnet-2"
   }
