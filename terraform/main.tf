@@ -134,21 +134,55 @@ provider "helm" {
   }
 }
 
+resource "helm_release" "prometheus_operator" {
+  provider   = helm.with_config
+  name       = "prometheus-operator"
+  repository = "https://prometheus-community.github.io/helm-charts"
+  chart      = "kube-prometheus-stack"
+  version    = "55.5.0"  # Use a stable version
+  namespace  = "monitoring"
+  create_namespace = true
+
+  set {
+    name  = "grafana.enabled"
+    value = "false"  # Disable Grafana if you don't need it
+  }
+
+  set {
+    name  = "prometheus.enabled"
+    value = "true"
+  }
+
+  set {
+    name  = "prometheus.serviceMonitor.selfMonitor"
+    value = "true"
+  }
+}
+
+resource "null_resource" "wait_for_prometheus_operator" {
+  depends_on = [helm_release.prometheus_operator]
+  provisioner "local-exec" {
+    command = "kubectl --kubeconfig=${abspath(path.root)}/modules/compute/kubeconfig -n monitoring wait --for=condition=ready pod -l app.kubernetes.io/name=prometheus-operator --timeout=300s"
+  }
+}
+
 resource "helm_release" "nginx_ingress" {
   provider   = helm.with_config
   name       = "nginx-ingress"
   repository = "https://kubernetes.github.io/ingress-nginx"
   chart      = "ingress-nginx"
-  version    = "4.10.1" # Use latest stable
-
+  version    = "4.10.1"
   namespace  = "ingress-nginx"
   create_namespace = true
 
   values = [
     file("${abspath(path.root)}/../helm/ngix-ingress/values.yaml")
   ]
-}
 
+  depends_on = [
+    null_resource.wait_for_prometheus_operator
+  ]
+}
 
 resource "null_resource" "wait_for_nginx_ingress" {
   depends_on = [helm_release.nginx_ingress]
@@ -156,7 +190,6 @@ resource "null_resource" "wait_for_nginx_ingress" {
     command = "kubectl --kubeconfig=${abspath(path.root)}/modules/compute/kubeconfig -n ingress-nginx wait --for=condition=available --timeout=300s deployment/nginx-ingress-ingress-nginx-controller"
   }
 }
-
 
 data "kubernetes_service" "nginx_ingress" {
   provider = kubernetes.with_config
@@ -174,7 +207,6 @@ data "kubernetes_service" "nginx_ingress" {
 #   load_balancer_ip = try(data.kubernetes_service.nginx_ingress.status.0.load_balancer.0.ingress.0.ip, "")
 #   load_balancer_endpoint = coalesce(local.load_balancer_hostname, local.load_balancer_ip)
 # }
-
 
 resource "helm_release" "argocd" {
   provider         = helm.with_config
