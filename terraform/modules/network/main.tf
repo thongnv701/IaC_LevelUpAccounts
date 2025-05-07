@@ -18,6 +18,24 @@ resource "aws_subnet" "k3s_subnet" {
   }
 }
 
+resource "aws_subnet" "k3s_subnet_1" {
+  vpc_id            = aws_vpc.k3s_vpc.id
+  cidr_block        = cidrsubnet(var.vpc_cidr, 8, 1) # e.g., 10.0.1.0/24
+  availability_zone = "${var.availability_zone}a" # Different AZ than your first subnet
+  tags = {
+    Name = "k3s-subnet-1"
+  }
+}
+
+resource "aws_subnet" "k3s_subnet_2" {
+  vpc_id            = aws_vpc.k3s_vpc.id
+  cidr_block        = cidrsubnet(var.vpc_cidr, 8, 2) # e.g., 10.0.2.0/24
+  availability_zone = "${var.availability_zone}b" # Different AZ than your first subnet
+  tags = {
+    Name = "k3s-subnet-2"
+  }
+}
+
 resource "aws_security_group" "k3s_security_group" {
   name        = "k3s-security-group"
   description = "Security group for K3s cluster"
@@ -81,7 +99,12 @@ resource "aws_route_table" "k3s_public" {
   tags = { Name = "k3s-public-rt" }
 }
 
-resource "aws_route_table_association" "k3s_subnet_assoc" {
-  subnet_id      = aws_subnet.k3s_subnet.id
+resource "aws_route_table_association" "k3s_subnet_1_assoc" {
+  subnet_id      = aws_subnet.k3s_subnet_1.id
+  route_table_id = aws_route_table.k3s_public.id
+}
+
+resource "aws_route_table_association" "k3s_subnet_2_assoc" {
+  subnet_id      = aws_subnet.k3s_subnet_2.id
   route_table_id = aws_route_table.k3s_public.id
 }

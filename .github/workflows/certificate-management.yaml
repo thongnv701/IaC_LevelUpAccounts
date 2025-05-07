@@ -1,0 +1,66 @@
+name: Certificate Management
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: 'Action to perform'
+        required: true
+        default: 'verify'
+        type: choice
+        options:
+          - verify
+          - renew
+          - check-status
+
+jobs:
+  manage-certificates:
+    runs-on: ubuntu-latest
+    environment: terraform
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Download kubeconfig from S3
+        run: aws s3 cp s3://my-terraform-backup-0701/kubeconfig ./kubeconfig.yaml
+
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: 'latest'
+
+      - name: Verify certificates
+        if: ${{ github.event.inputs.action == 'verify' }}
+        env:
+          KUBECONFIG: ./kubeconfig.yaml
+        run: |
+          echo "Checking certificate status..."
+          kubectl get certificate -A
+          kubectl get certificaterequest -A
+          kubectl get order -A
+          kubectl get challenge -A
+
+      - name: Check certificate status
+        if: ${{ github.event.inputs.action == 'check-status' }}
+        env:
+          KUBECONFIG: ./kubeconfig.yaml
+        run: |
+          echo "Detailed certificate status..."
+          kubectl describe certificate -n argocd argocd-tls
+          kubectl get events -n cert-manager --sort-by='.lastTimestamp'
+
+      - name: Force certificate renewal
+        if: ${{ github.event.inputs.action == 'renew' }}
+        env:
+          KUBECONFIG: ./kubeconfig.yaml
+        run: |
+          echo "Forcing certificate renewal..."
+          kubectl delete certificate -n argocd argocd-tls
+          kubectl delete secret -n argocd argocd-tls 
