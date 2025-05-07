@@ -202,31 +202,6 @@ resource "null_resource" "wait_for_nginx_ingress" {
   }
 }
 
-# After NGINX is ready, enable the admission webhook
-resource "helm_release" "nginx_ingress_admission" {
-  provider   = helm.with_config
-  name       = "nginx-ingress-admission"
-  repository = "https://kubernetes.github.io/ingress-nginx"
-  chart      = "ingress-nginx"
-  version    = "4.10.1"
-  namespace  = "ingress-nginx"
-  timeout    = 600
-
-  values = [
-    <<-EOF
-    controller:
-      admissionWebhooks:
-        enabled: true
-        patch:
-          enabled: true
-    EOF
-  ]
-
-  depends_on = [
-    null_resource.wait_for_nginx_ingress
-  ]
-}
-
 data "kubernetes_service" "nginx_ingress" {
   provider = kubernetes.with_config
   depends_on = [null_resource.wait_for_nginx_ingress]
@@ -260,7 +235,7 @@ resource "helm_release" "argocd" {
   ]
 
   depends_on = [
-    helm_release.nginx_ingress_admission
+    helm_release.wait_for_nginx_ingress
   ]
 }
 
