@@ -108,5 +108,37 @@ jobs:
           KUBECONFIG: ./kubeconfig.yaml
         run: |
           echo "Verifying cert-manager setup..."
+          # Check if cert-manager pods are running
+          echo "Checking cert-manager pods:"
+          kubectl get pods -n cert-manager
+          
+          # Check if our ClusterIssuer was created successfully
+          echo "Checking ClusterIssuer:"
+          kubectl get clusterissuer letsencrypt-prod -o wide
+          
+          # Check if our secret was created
+          echo "Checking Route53 credentials secret:"
           kubectl get secret route53-credentials-secret -n cert-manager
-          kubectl get clusterissuer letsencrypt-prod 
+
+      - name: Create test certificate
+        env:
+          KUBECONFIG: ./kubeconfig.yaml
+        run: |
+          # Create a test certificate to verify the ClusterIssuer works
+          cat <<EOF | kubectl apply -f -
+          apiVersion: cert-manager.io/v1
+          kind: Certificate
+          metadata:
+            name: test-cert
+            namespace: cert-manager
+          spec:
+            secretName: test-cert-tls
+            issuerRef:
+              name: letsencrypt-prod
+              kind: ClusterIssuer
+            dnsNames:
+            - test.example.com
+          EOF
+          
+          echo "Test certificate created. It may take a few minutes to be processed."
+          echo "To check status later, run: kubectl get certificate test-cert -n cert-manager" 
