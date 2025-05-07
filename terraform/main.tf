@@ -200,7 +200,6 @@ resource "null_resource" "wait_for_nginx_ingress" {
   provisioner "local-exec" {
     command = <<-EOC
       kubectl --kubeconfig=${abspath(path.root)}/modules/compute/kubeconfig -n ingress-nginx wait --for=condition=ready pod -l app.kubernetes.io/component=controller --timeout=300s
-      kubectl --kubeconfig=${abspath(path.root)}/modules/compute/kubeconfig -n ingress-nginx wait --for=condition=ready pod -l app.kubernetes.io/component=admission-webhook --timeout=300s
     EOC
   }
 }
