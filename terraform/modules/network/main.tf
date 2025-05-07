@@ -36,6 +36,14 @@ resource "aws_security_group" "k3s_security_group" {
   vpc_id      = aws_vpc.k3s_vpc.id
 
   # For production, restrict these rules
+    ingress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+
   ingress {
     from_port   = 22
     to_port     = 22
