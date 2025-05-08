@@ -1,28 +1,33 @@
-# apiVersion: argoproj.io/v1alpha1
-# kind: Application
-# metadata:
-#   name: prometheus
-#   namespace: argocd
-# spec:
-#   project: default
-#   source:
-#     repoURL: https://prometheus-community.github.io/helm-charts
-#     chart: prometheus
-#     targetRevision: 25.8.0 # or latest
-#     helm:
-#       values: |
-#         server:
-#           resources:
-#             requests:
-#               cpu: "200m"
-#               memory: "256Mi"
-#             limits:
-#               cpu: "500m"
-#               memory: "512Mi"
-#   destination:
-#     server: https://kubernetes.default.svc
-#     namespace: monitoring
-#   syncPolicy:
-#     automated:
-#       prune: true
-#       selfHeal: true
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: prometheus-operator
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    chart: kube-prometheus-stack
+    repoURL: https://prometheus-community.github.io/helm-charts
+    targetRevision: 55.5.0
+    helm:
+      values: |
+        grafana:
+          enabled: false
+        prometheus:
+          enabled: true
+          serviceMonitor:
+            selfMonitor: true
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+  # This indicates that this app is managed externally (by Terraform)
+  # ArgoCD will adopt the resources but not create them from scratch
+  skipDryRunOnMissingResource: true

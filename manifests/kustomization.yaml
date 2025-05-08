@@ -1,6 +1,0 @@
-resources:
-  - namespaces/monitoring.yaml
-  - limit-ranges/default-limits.yaml
-  - limit-ranges/monitoring-limits.yaml
-  - resource-quotas/default-quota.yaml
-  - resource-quotas/monitoring-quota.yaml
