@@ -1,0 +1,325 @@
+name: Complete Infrastructure Deployment
+
+on:
+  workflow_dispatch:
+    inputs:
+      deploy_terraform:
+        description: 'Deploy Terraform infrastructure'
+        type: boolean
+        default: true
+      deploy_nginx_ingress:
+        description: 'Deploy Nginx Ingress'
+        type: boolean
+        default: true
+      deploy_cert_manager:
+        description: 'Deploy Cert Manager'
+        type: boolean
+        default: true
+      deploy_app_of_apps:
+        description: 'Deploy App of Apps'
+        type: boolean
+        default: true
+
+jobs:
+  terraform-infra:
+    if: ${{ github.event.inputs.deploy_terraform == 'true' }}
+    runs-on: ubuntu-latest
+    environment: terraform
+    env:
+      TF_VAR_allowed_cidr: ${{ secrets.ALLOWED_CIDR }}
+      TF_VAR_private_key_content: ${{ secrets.PRIVATE_KEY_CONTENT }}
+      TF_VAR_rds_endpoint: ${{ secrets.RDS_ENDPOINT }}
+      TF_VAR_rds_username: ${{ secrets.RDS_USERNAME }}
+      TF_VAR_rds_password: ${{ secrets.RDS_PASSWORD }}
+      TF_VAR_route53_zone_id: ${{ secrets.ROUTE53_ZONE_ID }}
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      AWS_DEFAULT_REGION: "ap-southeast-1"
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v1
+        with:
+          terraform_version: "1.3.0"
+
+      - name: Download kubeconfig from S3 (if exists)
+        run: aws s3 cp s3://my-terraform-backup-0701/kubeconfig ./terraform/modules/compute/kubeconfig || true
+
+      - name: Terraform Init
+        working-directory: ./terraform
+        run: terraform init
+
+      - name: Terraform Plan
+        working-directory: ./terraform
+        run: terraform plan -out=tfplan
+
+      - name: Terraform Apply
+        working-directory: ./terraform
+        run: terraform apply -auto-approve tfplan
+
+      - name: Upload kubeconfig to S3
+        run: aws s3 cp ./terraform/modules/compute/kubeconfig s3://my-terraform-backup-0701/kubeconfig
+
+  nginx-ingress:
+    needs: terraform-infra
+    if: ${{ always() && (needs.terraform-infra.result == 'success' || needs.terraform-infra.result == 'skipped') && github.event.inputs.deploy_nginx_ingress == 'true' }}
+    runs-on: ubuntu-latest
+    environment: terraform
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      AWS_DEFAULT_REGION: "ap-southeast-1"
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ap-southeast-1
+
+      - name: Download kubeconfig from S3
+        run: aws s3 cp s3://my-terraform-backup-0701/kubeconfig ./kubeconfig
+
+      - name: Install kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: 'latest'
+
+      - name: Install Helm
+        uses: azure/setup-helm@v3
+        with:
+          version: 'latest'
+
+      - name: Deploy Nginx Ingress
+        env:
+          KUBECONFIG: ./kubeconfig
+        run: |
+          # Create namespace
+          kubectl create namespace ingress-nginx --dry-run=client -o yaml | kubectl apply -f -
+          
+          # Install Nginx Ingress
+          helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
+          helm repo update
+          
+          helm upgrade --install nginx-ingress ingress-nginx/ingress-nginx \
+            --namespace ingress-nginx \
+            --values ./helm/ngix-ingress/values.yaml \
+            --wait
+          
+          # Wait for deployment to be ready
+          kubectl -n ingress-nginx wait --for=condition=available deployment/nginx-ingress-ingress-nginx-controller --timeout=300s
+
+  cert-manager-setup:
+    needs: nginx-ingress
+    if: ${{ always() && (needs.nginx-ingress.result == 'success' || needs.nginx-ingress.result == 'skipped') && github.event.inputs.deploy_cert_manager == 'true' }}
+    runs-on: ubuntu-latest
+    environment: terraform
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      AWS_DEFAULT_REGION: "ap-southeast-1"
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ap-southeast-1
+
+      - name: Download kubeconfig from S3
+        run: aws s3 cp s3://my-terraform-backup-0701/kubeconfig ./kubeconfig.yaml
+
+      - name: Create AWS credentials secret
+        run: |
+          cat <<EOF > helm/cert-manager/aws-secret.yaml
+          apiVersion: v1
+          kind: Secret
+          metadata:
+            name: route53-credentials-secret
+            namespace: cert-manager
+          type: Opaque
+          stringData:
+            secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          EOF
+
+      - name: Create ClusterIssuer
+        run: |
+          cat <<EOF > helm/cert-manager/cluster-issuer.yaml
+          apiVersion: cert-manager.io/v1
+          kind: ClusterIssuer
+          metadata:
+            name: letsencrypt-prod
+          spec:
+            acme:
+              server: https://acme-v02.api.letsencrypt.org/directory
+              email: ${{ secrets.ACME_EMAIL }}
+              privateKeySecretRef:
+                name: letsencrypt-prod
+              solvers:
+              - dns01:
+                  route53:
+                    region: ap-southeast-1
+                    hostedZoneID: ${{ secrets.AWS_HOSTED_ZONE_ID }}
+                    accessKeyID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+                    secretAccessKeySecretRef:
+                      name: route53-credentials-secret
+                      key: secret-access-key
+          EOF
+
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: 'latest'
+
+      - name: Install Helm
+        uses: azure/setup-helm@v3
+        with:
+          version: 'latest'
+
+      - name: Create cert-manager namespace
+        env:
+          KUBECONFIG: ./kubeconfig.yaml
+        run: |
+          kubectl create namespace cert-manager --dry-run=client -o yaml | kubectl apply -f -
+
+      - name: Install cert-manager
+        env:
+          KUBECONFIG: ./kubeconfig.yaml
+        run: |
+          # Add the Jetstack Helm repository
+          helm repo add jetstack https://charts.jetstack.io
+          helm repo update
+          
+          # Install cert-manager with CRDs
+          helm install cert-manager jetstack/cert-manager \
+            --namespace cert-manager \
+            --create-namespace \
+            --set installCRDs=true \
+            --version v1.11.0 \
+            --wait
+
+      - name: Apply cert-manager configuration
+        env:
+          KUBECONFIG: ./kubeconfig.yaml
+        run: |
+          kubectl apply -f helm/cert-manager/aws-secret.yaml
+          kubectl apply -f helm/cert-manager/cluster-issuer.yaml
+          
+          # Wait for ClusterIssuer to be ready
+          echo "Waiting for ClusterIssuer to be ready..."
+          sleep 10
+          kubectl get clusterissuer letsencrypt-prod -o wide
+
+  app-of-apps-deploy:
+    needs: [cert-manager-setup]
+    if: ${{ always() && (needs.cert-manager-setup.result == 'success' || needs.cert-manager-setup.result == 'skipped') && github.event.inputs.deploy_app_of_apps == 'true' }}
+    runs-on: ubuntu-latest
+    environment: terraform
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      AWS_DEFAULT_REGION: "ap-southeast-1"
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ap-southeast-1
+
+      - name: Download kubeconfig from S3
+        run: aws s3 cp s3://my-terraform-backup-0701/kubeconfig ./kubeconfig
+
+      - name: Install kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: 'latest'
+
+      - name: Wait for ArgoCD to be ready (from Terraform)
+        env:
+          KUBECONFIG: ./kubeconfig
+        run: |
+          # Check if ArgoCD namespace exists
+          echo "Checking for ArgoCD namespace..."
+          kubectl get namespace argocd || true
+          
+          # Wait for ArgoCD server to be ready
+          echo "Waiting for ArgoCD server to be ready..."
+          kubectl wait --for=condition=available --timeout=300s deployment/argocd-server -n argocd || true
+
+      - name: Apply app-of-apps.yaml
+        env:
+          KUBECONFIG: ./kubeconfig
+        run: kubectl apply -f ./apps/app-of-apps.yaml
+
+  dns-management:
+    needs: [terraform-infra]
+    if: ${{ always() && (needs.terraform-infra.result == 'success' || needs.terraform-infra.result == 'skipped') }}
+    runs-on: ubuntu-latest
+    environment: terraform
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      AWS_DEFAULT_REGION: "ap-southeast-1"
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v1
+        with:
+          terraform_version: "1.3.0"
+
+      - name: Terraform Init
+        working-directory: ./terraform
+        run: terraform init
+
+      - name: Apply DNS Configuration
+        working-directory: ./terraform
+        run: terraform apply -target=aws_route53_record.service_records -auto-approve
+
+  deployment-summary:
+    needs: [terraform-infra, nginx-ingress, cert-manager-setup, app-of-apps-deploy, dns-management]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Summarize Deployment
+        run: |
+          echo "### Deployment Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Component | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|-----------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Terraform Infrastructure | ${{ needs.terraform-infra.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Nginx Ingress | ${{ needs.nginx-ingress.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Cert Manager | ${{ needs.cert-manager-setup.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| App of Apps | ${{ needs.app-of-apps-deploy.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| DNS Management | ${{ needs.dns-management.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          if [[ "${{ needs.terraform-infra.result }}" == "success" && "${{ needs.nginx-ingress.result }}" == "success" && "${{ needs.cert-manager-setup.result }}" == "success" && "${{ needs.app-of-apps-deploy.result }}" == "success" && "${{ needs.dns-management.result }}" == "success" ]]; then
+            echo "✅ **Complete deployment successful!**" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "You can now access:" >> $GITHUB_STEP_SUMMARY
+            echo "- ArgoCD: https://argocd.thongit.space:30443" >> $GITHUB_STEP_SUMMARY
+            echo "- Grafana: https://grafana.thongit.space:30443" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "⚠️ **Deployment had some issues!**" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "Please check the logs for more details." >> $GITHUB_STEP_SUMMARY
+          fi 
