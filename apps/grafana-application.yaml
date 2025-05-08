@@ -1,0 +1,87 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: grafana
+  namespace: argocd
+spec:
+  project: default
+  source:
+    chart: grafana
+    repoURL: https://grafana.github.io/helm-charts
+    targetRevision: 6.57.4
+    helm:
+      values: |
+        ingress:
+          enabled: true
+          ingressClassName: nginx
+          hosts:
+            - grafana.thongit.space
+          tls:
+            - hosts:
+                - grafana.thongit.space
+              secretName: grafana-tls
+          annotations:
+            nginx.ingress.kubernetes.io/ssl-redirect: "true"
+            cert-manager.io/cluster-issuer: "letsencrypt-prod"
+
+        adminPassword: "admin-password" # Change this to a secure password
+
+        datasources:
+          datasources.yaml:
+            apiVersion: 1
+            datasources:
+              - name: Prometheus
+                type: prometheus
+                url: http://prometheus-operated.monitoring.svc.cluster.local:9090
+                access: proxy
+                isDefault: true
+
+        dashboardProviders:
+          dashboardproviders.yaml:
+            apiVersion: 1
+            providers:
+              - name: 'default'
+                orgId: 1
+                folder: ''
+                type: file
+                disableDeletion: false
+                editable: true
+                options:
+                  path: /var/lib/grafana/dashboards/default
+
+        dashboards:
+          default:
+            kubernetes-cluster:
+              gnetId: 7249
+              revision: 1
+              datasource: Prometheus
+
+        persistence:
+          enabled: true
+          size: 5Gi
+
+        resources:
+          requests:
+            cpu: "100m"
+            memory: "128Mi"
+          limits:
+            cpu: "300m"
+            memory: "512Mi"
+
+        serviceAccount:
+          create: true
+          name: grafana
+          
+        service:
+          type: ClusterIP
+          port: 80
+          
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true 
