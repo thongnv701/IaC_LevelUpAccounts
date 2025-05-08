@@ -35,6 +35,13 @@ spec:
                 url: http://prometheus-operated.monitoring.svc.cluster.local:9090
                 access: proxy
                 isDefault: true
+              - name: Loki
+                type: loki
+                url: http://loki-stack:3100
+                access: proxy
+                editable: true
+                jsonData:
+                  maxLines: 5000
 
         dashboardProviders:
           dashboardproviders.yaml:
@@ -48,6 +55,14 @@ spec:
                 editable: true
                 options:
                   path: /var/lib/grafana/dashboards/kubernetes
+              - name: 'logs'
+                orgId: 1
+                folder: 'Logs'
+                type: file
+                disableDeletion: false
+                editable: true
+                options:
+                  path: /var/lib/grafana/dashboards/logs
 
         # Kubernetes dashboards
         dashboards:
@@ -81,6 +96,22 @@ spec:
               gnetId: 15757
               revision: 23
               datasource: Prometheus
+          logs:
+            # Logs dashboard
+            loki-logs:
+              gnetId: 13639
+              revision: 1
+              datasource: Loki
+            # K8s logs dashboard
+            loki-k8s-logs:
+              gnetId: 15141
+              revision: 1
+              datasource: Loki
+            # Loki dashboard
+            loki-dashboard:
+              gnetId: 12611
+              revision: 1
+              datasource: Loki
 
         # Enable persistent storage
         persistence:
