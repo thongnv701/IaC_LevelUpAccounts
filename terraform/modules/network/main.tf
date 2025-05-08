@@ -16,6 +16,8 @@ resource "aws_subnet" "k3s_subnet_1" {
 
   tags = {
     Name = "k3s-subnet-1"
+    "kubernetes.io/role/elb"         = "1"
+    "kubernetes.io/cluster/default"  = "owned"
   }
 }
 
@@ -27,6 +29,8 @@ resource "aws_subnet" "k3s_subnet_2" {
 
   tags = {
     Name = "k3s-subnet-2"
+    "kubernetes.io/role/elb"         = "1"
+    "kubernetes.io/cluster/default"  = "owned"
   }
 }
 
