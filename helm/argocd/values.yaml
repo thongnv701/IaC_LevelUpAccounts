@@ -34,9 +34,9 @@ server:
       nginx.ingress.kubernetes.io/backend-protocol: "HTTPS"
       nginx.ingress.kubernetes.io/ssl-passthrough: "true"
       nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
-      cert-manager.io/cluster-issuer: "letsencrypt-prod"  # Only if using cert-manager
+      cert-manager.io/cluster-issuer: "letsencrypt-prod"
     hosts:
-      - argocd.thongit.space  # Explicit hostname
+      - argocd.thongit.space
     paths:
       - /
     tls:
