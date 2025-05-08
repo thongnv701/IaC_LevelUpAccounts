@@ -36,7 +36,7 @@ jobs:
         run: mkdir -p ./terraform/modules/compute
 
       - name: Download kubeconfig from S3
-        run: aws s3 cp s3://my-terraform-backup-0701/kubeconfig /home/runner/work/IaC_LevelUpAccounts/IaC_LevelUpAccounts/terraform/modules/compute/kubeconfig
+        run: aws s3 cp s3://my-terraform-backup-0701/kubeconfig /home/runner/work/IaC_LevelUpAccounts/IaC_LevelUpAccounts/terraform/modules/compute/kubeconfig || true
 
       - name: Terraform Init
         working-directory: ./terraform
