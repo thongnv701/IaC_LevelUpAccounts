@@ -27,6 +27,13 @@ server:
     - http://argocd-dex-server.argocd.svc.cluster.local:5556
     - --dex-server-plaintext 
   replicas: 1
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
   ingress:
     enabled: true
     ingressClassName: nginx
@@ -34,6 +41,8 @@ server:
       nginx.ingress.kubernetes.io/backend-protocol: "HTTPS"
       nginx.ingress.kubernetes.io/ssl-passthrough: "true"
       nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+      nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+      nginx.ingress.kubernetes.io/proxy-send-timeout: "300"
       cert-manager.io/cluster-issuer: "letsencrypt-prod"
     hosts:
       - argocd.thongit.space

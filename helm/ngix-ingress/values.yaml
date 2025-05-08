@@ -12,6 +12,11 @@ controller:
     use-forwarded-headers: "true"
     compute-full-forwarded-for: "true"
     use-proxy-protocol: "false"
+    proxy-read-timeout: "180"
+    proxy-send-timeout: "180"
+    proxy-body-size: "100m"
+    keep-alive: "75"
+    keep-alive-requests: "100"
   metrics:
     enabled: true
     serviceMonitor:
