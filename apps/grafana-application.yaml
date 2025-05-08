@@ -24,7 +24,7 @@ spec:
             nginx.ingress.kubernetes.io/ssl-redirect: "true"
             cert-manager.io/cluster-issuer: "letsencrypt-prod"
 
-        adminPassword: "admin-password" # Change this to a secure password
+        adminPassword: "admin-password"
 
         datasources:
           datasources.yaml:
@@ -40,33 +40,52 @@ spec:
           dashboardproviders.yaml:
             apiVersion: 1
             providers:
-              - name: 'default'
+              - name: 'kubernetes'
                 orgId: 1
-                folder: ''
+                folder: 'Kubernetes'
                 type: file
                 disableDeletion: false
                 editable: true
                 options:
-                  path: /var/lib/grafana/dashboards/default
+                  path: /var/lib/grafana/dashboards/kubernetes
 
+        # Kubernetes dashboards
         dashboards:
-          default:
-            kubernetes-cluster:
+          kubernetes:
+            # Kubernetes Capacity Planning
+            k8s-capacity-planning:
+              gnetId: 5228
+              revision: 1
+              datasource: Prometheus
+              
+            # Kubernetes Cluster
+            k8s-cluster:
               gnetId: 7249
               revision: 1
               datasource: Prometheus
+              
+            # Kubernetes Pod Resources
+            k8s-pod-resources:
+              gnetId: 11199
+              revision: 1
+              datasource: Prometheus
+              
+            # Node Exporter Full
+            node-exporter:
+              gnetId: 1860
+              revision: 27
+              datasource: Prometheus
+              
+            # Kubernetes All Namespaces
+            k8s-all-namespaces:
+              gnetId: 15757
+              revision: 23
+              datasource: Prometheus
 
+        # Enable persistent storage
         persistence:
           enabled: true
           size: 5Gi
-
-        resources:
-          requests:
-            cpu: "100m"
-            memory: "128Mi"
-          limits:
-            cpu: "300m"
-            memory: "512Mi"
 
         serviceAccount:
           create: true
@@ -84,4 +103,4 @@ spec:
       prune: true
       selfHeal: true
     syncOptions:
-      - CreateNamespace=true 
+      - CreateNamespace=true
