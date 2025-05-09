@@ -199,12 +199,14 @@ jobs:
           if kubectl --kubeconfig=./modules/compute/kubeconfig -n argocd get secret argocd-secret &>/dev/null; then
             echo "Patching existing argocd-secret with new admin password..."
             
-            # Create a patch file
-            cat <<EOF > argocd-secret-patch.yaml
-          data:
-            admin.password: $(echo -n "$PASSWORD_HASH" | base64)
-            admin.passwordMtime: $(date +%FT%T%Z | base64)
-          EOF
+            # Encode values properly for the patch
+            ENCODED_PASSWORD=$(echo -n "$PASSWORD_HASH" | base64 -w 0)
+            ENCODED_TIMESTAMP=$(date +%FT%T%Z | base64 -w 0)
+            
+            # Create a proper patch file with correct YAML formatting
+            echo "data:" > argocd-secret-patch.yaml
+            echo "  admin.password: ${ENCODED_PASSWORD}" >> argocd-secret-patch.yaml
+            echo "  admin.passwordMtime: ${ENCODED_TIMESTAMP}" >> argocd-secret-patch.yaml
             
             # Apply the patch
             kubectl --kubeconfig=./modules/compute/kubeconfig -n argocd patch secret argocd-secret --patch "$(cat argocd-secret-patch.yaml)"
@@ -231,6 +233,36 @@ jobs:
           
           # Wait for server to be ready
           kubectl --kubeconfig=./modules/compute/kubeconfig -n argocd rollout status deployment argocd-server --timeout=300s
+          
+          # As a last resort, use the ArgoCD CLI to reset the password directly
+          echo "Attempting to update the admin password using the ArgoCD CLI..."
+          
+          # Install ArgoCD CLI
+          curl -sSL -o /usr/local/bin/argocd https://github.com/argoproj/argo-cd/releases/latest/download/argocd-linux-amd64
+          chmod +x /usr/local/bin/argocd
+          
+          # Forward the ArgoCD API server port
+          kubectl --kubeconfig=./modules/compute/kubeconfig port-forward svc/argocd-server -n argocd 8080:443 &
+          PORT_FORWARD_PID=$!
+          sleep 5
+          
+          # Log in with the initial admin password and update it
+          INITIAL_PASSWORD=$(kubectl --kubeconfig=./modules/compute/kubeconfig -n argocd get secret argocd-initial-admin-password -o jsonpath="{.data.password}" 2>/dev/null | base64 -d)
+          
+          if [ -n "$INITIAL_PASSWORD" ]; then
+            echo "Found initial admin password, using it to update to new password..."
+            argocd login localhost:8080 --username admin --password "$INITIAL_PASSWORD" --insecure
+            argocd account update-password --current-password "$INITIAL_PASSWORD" --new-password "$ARGOCD_ADMIN_PASSWORD"
+            echo "Password updated using ArgoCD CLI."
+          else
+            echo "Could not find initial admin password, trying other methods..."
+            # Try other approaches to login
+            kubectl --kubeconfig=./modules/compute/kubeconfig -n argocd get pods
+            kubectl --kubeconfig=./modules/compute/kubeconfig -n argocd get secret
+          fi
+          
+          # Kill port forwarding
+          kill $PORT_FORWARD_PID || true
 
   aws-secret-setup:
     needs: argocd-install
