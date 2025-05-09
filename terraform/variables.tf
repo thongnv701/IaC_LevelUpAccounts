@@ -39,5 +39,6 @@ variable "argocd_admin_password" {
   description = "Bcrypt hashed password for the ArgoCD admin user"
   type        = string
   sensitive   = true
-  # No default - this should come from GitHub secrets
+  # This will be overridden by the GitHub workflow, but is needed to prevent errors
+  default     = "$2a$10$mivhwttXM0U5eBrZGtAG8.VSRL1l9cZNAmaSaqotVSlrhpRN4nUIu" # Default hash for 'admin'
 }
