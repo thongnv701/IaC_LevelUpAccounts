@@ -171,11 +171,11 @@ jobs:
         with:
           version: 'latest'
 
-      - name: Create and apply AWS credentials secret
+      - name: Create namespace and secrets
         env:
           KUBECONFIG: ./kubeconfig.yaml
         run: |
-          # Create cert-manager namespace directly (don't wait for ArgoCD)
+          # Create cert-manager namespace directly
           echo "Creating cert-manager namespace..."
           kubectl create namespace cert-manager --dry-run=client -o yaml | kubectl apply -f -
           
@@ -195,33 +195,6 @@ jobs:
           
           echo "AWS Credentials and configuration secrets created in cert-manager namespace"
           
-          # Wait for cert-manager to be installed by ArgoCD
-          echo "Waiting for cert-manager pods to be ready..."
-          for i in {1..30}; do
-            if kubectl -n cert-manager get pods | grep -q "Running"; then
-              echo "cert-manager pods are running"
-              break
-            fi
-            echo "Waiting for cert-manager pods... ($i/30)"
-            sleep 10
-          done
-          
-          # Wait for the ClusterIssuer to be created and patch it
-          echo "Waiting for ClusterIssuer to be created by ArgoCD..."
-          for i in {1..30}; do
-            if kubectl get clusterissuer letsencrypt-prod; then
-              echo "Patching ClusterIssuer with credentials..."
-              kubectl patch clusterissuer letsencrypt-prod --type=json -p='[
-                {"op": "replace", "path": "/spec/acme/email", "value": "'"$ACME_EMAIL"'"},
-                {"op": "replace", "path": "/spec/acme/solvers/0/dns01/route53/hostedZoneID", "value": "'"$AWS_HOSTED_ZONE_ID"'"},
-                {"op": "replace", "path": "/spec/acme/solvers/0/dns01/route53/accessKeyID", "value": "'"$AWS_ACCESS_KEY_ID"'"}
-              ]'
-              break
-            fi
-            echo "Waiting for ClusterIssuer... ($i/30)"
-            sleep 10
-          done
-
   app-of-apps-deploy:
     needs: [aws-secret-setup]
     if: ${{ always() && (needs.aws-secret-setup.result == 'success' || needs.aws-secret-setup.result == 'skipped') && github.event.inputs.deploy_app_of_apps == 'true' }}
@@ -270,36 +243,58 @@ jobs:
           KUBECONFIG: ./kubeconfig
         run: kubectl apply -f ./apps/app-of-apps.yaml
         
-      - name: Wait for ClusterIssuer and patch with credentials
+      - name: Wait for cert-manager CRDs
         env:
           KUBECONFIG: ./kubeconfig
         run: |
-          # Wait for cert-manager to be installed by ArgoCD
-          echo "Waiting for cert-manager pods to be ready..."
+          # Add the kubectl wait loop with timeout
+          echo "Deploying apps through ArgoCD. This will take some time..."
+          echo "Waiting for cert-manager CRDs to be established (timeout: 5 minutes)..."
+          
+          # Try for up to 5 minutes (30 x 10s = 300s = 5min)
           for i in {1..30}; do
-            if kubectl -n cert-manager get pods | grep -q "Running"; then
-              echo "cert-manager pods are running"
+            if kubectl get crd | grep -q "cert-manager.io"; then
+              echo "cert-manager CRDs are installed"
               break
             fi
-            echo "Waiting for cert-manager pods... ($i/30)"
+            echo "Waiting for cert-manager CRDs... ($i/30)"
             sleep 10
           done
           
+          # Validate that the CRDs are actually installed
+          if ! kubectl get crd | grep -q "cert-manager.io"; then
+            echo "Warning: cert-manager CRDs were not detected, but continuing anyway."
+          fi
+          
+          # Wait a bit more for the deployment to complete
+          echo "Giving cert-manager some time to fully initialize..."
+          sleep 30
+
+      - name: Patch ClusterIssuer with credentials
+        env:
+          KUBECONFIG: ./kubeconfig
+        run: |
           # Wait for the ClusterIssuer to be created and patch it
           echo "Waiting for ClusterIssuer to be created by ArgoCD..."
           for i in {1..30}; do
-            if kubectl get clusterissuer letsencrypt-prod; then
+            if kubectl get clusterissuer letsencrypt-prod 2>/dev/null; then
               echo "Patching ClusterIssuer with credentials..."
               kubectl patch clusterissuer letsencrypt-prod --type=json -p='[
                 {"op": "replace", "path": "/spec/acme/email", "value": "'"$ACME_EMAIL"'"},
                 {"op": "replace", "path": "/spec/acme/solvers/0/dns01/route53/hostedZoneID", "value": "'"$AWS_HOSTED_ZONE_ID"'"},
                 {"op": "replace", "path": "/spec/acme/solvers/0/dns01/route53/accessKeyID", "value": "'"$AWS_ACCESS_KEY_ID"'"}
               ]'
+              echo "ClusterIssuer patched successfully!"
               break
             fi
             echo "Waiting for ClusterIssuer... ($i/30)"
             sleep 10
           done
+          
+          # If ClusterIssuer isn't found after the wait, report but don't fail
+          if ! kubectl get clusterissuer letsencrypt-prod 2>/dev/null; then
+            echo "Warning: ClusterIssuer 'letsencrypt-prod' was not found after waiting. It may be created later by ArgoCD."
+          fi
 
   dns-management:
     needs: [terraform-infra]
