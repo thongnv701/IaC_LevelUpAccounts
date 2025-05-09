@@ -34,3 +34,10 @@ variable "route53_elb_zone_id" {
   # Default value for ap-southeast-1 (Singapore) region
   default     = "Z1LMS91P8CMLE5"
 }
+
+variable "argocd_admin_password" {
+  description = "Bcrypt hashed password for the ArgoCD admin user"
+  type        = string
+  sensitive   = true
+  # No default - this should come from GitHub secrets
+}

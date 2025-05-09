@@ -58,6 +58,13 @@ configs:
     url: https://argocd.thongit.space
     exec.enabled: true
     admin.enabled: true
+    # Add any other custom ConfigMap settings here
+
+  # Add secret management
+  secret:
+    # The 'admin.password' field will be populated from GitHub secrets
+    # The value should be a bcrypt hash of your password
+    createSecret: true
 
   params:
     server.insecure: false  # Should be false when using TLS
