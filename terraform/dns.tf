@@ -25,6 +25,12 @@ locals {
     instance if instance != null && instance != ""
   ]
   
+  # Use fallback IPs if no instances are found (same fallback as in GitHub workflow)
+  fallback_ips = ["13.250.45.250", "18.142.178.71"]
+  
+  # Use public_ips if available, otherwise use fallback_ips
+  effective_ips = length(local.public_ips) > 0 ? local.public_ips : local.fallback_ips
+  
   # Define all the domains we want to manage
   managed_domains = [
     "argocd.thongit.space",
@@ -40,14 +46,14 @@ resource "aws_route53_record" "service_records" {
   name    = each.value
   type    = "A"
   ttl     = "300"
-  records = local.public_ips
+  records = local.effective_ips
 }
 
 # Output the created DNS records
 output "dns_records" {
   value = {
     for domain in local.managed_domains :
-    domain => "${domain} -> ${join(", ", local.public_ips)}"
+    domain => "${domain} -> ${join(", ", local.effective_ips)}"
   }
   description = "DNS records created in Route 53"
 } 
