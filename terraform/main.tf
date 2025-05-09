@@ -236,6 +236,18 @@ resource "helm_release" "argocd" {
     file("${abspath(path.root)}/../helm/argocd/values.yaml")
   ]
 
+  # Set the admin password from GitHub secrets
+  set_sensitive {
+    name  = "configs.secret.argocdServerAdminPassword"
+    value = var.argocd_admin_password
+  }
+
+  # Explicitly disable the initial random password
+  set {
+    name  = "configs.secret.createSecret"
+    value = "true"
+  }
+
   depends_on = [
     null_resource.wait_for_nginx_ingress
   ]

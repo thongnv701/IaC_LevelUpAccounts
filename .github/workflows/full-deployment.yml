@@ -161,6 +161,10 @@ jobs:
       - name: Install ArgoCD via Terraform
         working-directory: ./terraform
         run: |
+          echo "Setting ArgoCD admin password..."
+          echo "Using password hash: ${TF_VAR_argocd_admin_password:0:10}... (truncated for security)"
+          
+          # Apply ArgoCD installation
           terraform apply -target=helm_release.argocd -auto-approve
           terraform apply -target=null_resource.wait_for_argocd -auto-approve
           
@@ -172,6 +176,61 @@ jobs:
           echo "Username: admin"
           echo "Password: $ARGOCD_ADMIN_PASSWORD_PLAIN"
           echo "-----------------------------------------------"
+          
+          # Add a step to diagnose the password
+          echo "Checking ArgoCD admin password..."
+          kubectl --kubeconfig=./modules/compute/kubeconfig -n argocd get secret argocd-initial-admin-password -o jsonpath="{.data.password}" 2>/dev/null | base64 -d || echo "Initial admin password secret not found"
+          
+          # Check if any other secret potentially contains the password
+          echo "Checking ArgoCD secrets..."
+          kubectl --kubeconfig=./modules/compute/kubeconfig -n argocd get secret | grep argocd
+          
+      - name: Ensure ArgoCD admin password is set directly (backup method)
+        working-directory: ./terraform
+        run: |
+          echo "Setting ArgoCD admin password directly as a fallback..."
+          
+          # Generate bcrypt hash
+          sudo apt-get update
+          sudo apt-get install -y apache2-utils
+          PASSWORD_HASH=$(htpasswd -bnBC 10 "" "$ARGOCD_ADMIN_PASSWORD" | tr -d ':\n' | cut -c 2-)
+          
+          # Check if argocd-secret exists
+          if kubectl --kubeconfig=./modules/compute/kubeconfig -n argocd get secret argocd-secret &>/dev/null; then
+            echo "Patching existing argocd-secret with new admin password..."
+            
+            # Create a patch file
+            cat <<EOF > argocd-secret-patch.yaml
+          data:
+            admin.password: $(echo -n "$PASSWORD_HASH" | base64)
+            admin.passwordMtime: $(date +%FT%T%Z | base64)
+          EOF
+            
+            # Apply the patch
+            kubectl --kubeconfig=./modules/compute/kubeconfig -n argocd patch secret argocd-secret --patch "$(cat argocd-secret-patch.yaml)"
+            
+            # Clean up
+            rm argocd-secret-patch.yaml
+          else
+            echo "Creating new argocd-secret with admin password..."
+            
+            # Create a new secret
+            kubectl --kubeconfig=./modules/compute/kubeconfig -n argocd create secret generic argocd-secret \
+              --from-literal=admin.password="$PASSWORD_HASH" \
+              --from-literal=admin.passwordMtime="$(date +%FT%T%Z)"
+          fi
+          
+          echo "ArgoCD admin password has been set directly."
+          echo "You can log in with:"
+          echo "Username: admin"
+          echo "Password: $ARGOCD_ADMIN_PASSWORD"
+          
+          # Restart the ArgoCD server to pick up the new password
+          echo "Restarting ArgoCD server to apply password change..."
+          kubectl --kubeconfig=./modules/compute/kubeconfig -n argocd rollout restart deployment argocd-server
+          
+          # Wait for server to be ready
+          kubectl --kubeconfig=./modules/compute/kubeconfig -n argocd rollout status deployment argocd-server --timeout=300s
 
   aws-secret-setup:
     needs: argocd-install
