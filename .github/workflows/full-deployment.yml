@@ -107,6 +107,8 @@ jobs:
     if: ${{ always() && (needs.nginx-ingress.result == 'success' || needs.nginx-ingress.result == 'skipped') }}
     runs-on: ubuntu-latest
     environment: terraform
+    outputs:
+      ARGOCD_ADMIN_PASSWORD: ${{ env.ARGOCD_ADMIN_PASSWORD_PLAIN }}
     env:
       AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
@@ -117,11 +119,32 @@ jobs:
       TF_VAR_rds_username: ${{ secrets.RDS_USERNAME }}
       TF_VAR_rds_password: ${{ secrets.RDS_PASSWORD }}
       TF_VAR_route53_zone_id: ${{ secrets.ROUTE53_ZONE_ID }}
-      TF_VAR_argocd_admin_password: ${{ secrets.ARGOCD_ADMIN_PASSWORD }}
+      # Use default ArgoCD admin password from secrets, or use a fixed one
+      ARGOCD_ADMIN_PASSWORD: ${{ secrets.ARGOCD_ADMIN_PASSWORD || 'admin123!' }}
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
+
+      - name: Generate ArgoCD bcrypt password hash
+        id: generate_password
+        run: |
+          # Install required packages
+          sudo apt-get update
+          sudo apt-get install -y apache2-utils
+          
+          # Generate bcrypt hash for the password
+          PASSWORD_HASH=$(htpasswd -bnBC 10 "" "$ARGOCD_ADMIN_PASSWORD" | tr -d ':\n' | cut -c 2-)
+          
+          # Save the hash as an environment variable for terraform
+          echo "TF_VAR_argocd_admin_password=$PASSWORD_HASH" >> $GITHUB_ENV
+          
+          # Save the plaintext password to be displayed at the end of the workflow
+          echo "ARGOCD_ADMIN_PASSWORD_PLAIN=$ARGOCD_ADMIN_PASSWORD" >> $GITHUB_ENV
+          
+          # Output information about the password (excluding the hash for security)
+          echo "Generated bcrypt hash for ArgoCD admin password"
+          echo "You will be able to log in with username: admin and password: $ARGOCD_ADMIN_PASSWORD"
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v1
@@ -140,6 +163,15 @@ jobs:
         run: |
           terraform apply -target=helm_release.argocd -auto-approve
           terraform apply -target=null_resource.wait_for_argocd -auto-approve
+          
+          # Display login information
+          echo "-----------------------------------------------"
+          echo "ArgoCD has been deployed successfully!"
+          echo "You can log in with:"
+          echo "URL: https://argocd.thongit.space"
+          echo "Username: admin"
+          echo "Password: $ARGOCD_ADMIN_PASSWORD_PLAIN"
+          echo "-----------------------------------------------"
 
   aws-secret-setup:
     needs: argocd-install
@@ -342,6 +374,9 @@ jobs:
     needs: [terraform-infra, nginx-ingress, argocd-install, aws-secret-setup, app-of-apps-deploy, dns-management]
     if: always()
     runs-on: ubuntu-latest
+    # Allow accessing environment variables from the argocd-install job
+    env:
+      ARGOCD_ADMIN_PASSWORD: ${{ needs.argocd-install.outputs.ARGOCD_ADMIN_PASSWORD || 'Check logs in argocd-install step' }}
     steps:
       - name: Summarize Deployment
         run: |
@@ -352,8 +387,9 @@ jobs:
           echo "| Terraform Infrastructure | ${{ needs.terraform-infra.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Nginx Ingress | ${{ needs.nginx-ingress.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| ArgoCD Installation | ${{ needs.argocd-install.result }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| AWS Secret Setup | ${{ needs.aws-secret-setup.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Cert Manager Prerequisites | ${{ needs.aws-secret-setup.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| App of Apps | ${{ needs.app-of-apps-deploy.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Cert Manager Configuration | ${{ needs.aws-secret-setup.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| DNS Management | ${{ needs.dns-management.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           
@@ -361,8 +397,10 @@ jobs:
             echo "✅ **Complete deployment successful!**" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
             echo "You can now access:" >> $GITHUB_STEP_SUMMARY
-            echo "- ArgoCD: https://argocd.thongit.space:30443" >> $GITHUB_STEP_SUMMARY
-            echo "- Grafana: https://grafana.thongit.space:30443" >> $GITHUB_STEP_SUMMARY
+            echo "- ArgoCD: https://argocd.thongit.space" >> $GITHUB_STEP_SUMMARY
+            echo "  - Username: admin" >> $GITHUB_STEP_SUMMARY
+            echo "  - Password: $ARGOCD_ADMIN_PASSWORD" >> $GITHUB_STEP_SUMMARY
+            echo "- Grafana: https://grafana.thongit.space" >> $GITHUB_STEP_SUMMARY
           else
             echo "⚠️ **Deployment had some issues!**" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
