@@ -175,25 +175,18 @@ jobs:
         env:
           KUBECONFIG: ./kubeconfig.yaml
         run: |
-          # Wait for cert-manager namespace to be created by ArgoCD
-          echo "Waiting for cert-manager namespace to be ready..."
-          for i in {1..30}; do
-            if kubectl get namespace cert-manager; then
-              break
-            fi
-            echo "Waiting for cert-manager namespace... ($i/30)"
-            sleep 10
-          done
-          
-          # Create namespace if it doesn't exist
+          # Create cert-manager namespace directly (don't wait for ArgoCD)
+          echo "Creating cert-manager namespace..."
           kubectl create namespace cert-manager --dry-run=client -o yaml | kubectl apply -f -
           
           # Create AWS credentials secret for Route53 DNS01 challenge
+          echo "Creating Route53 credentials secret..."
           kubectl -n cert-manager create secret generic route53-credentials-secret \
             --from-literal=secret-access-key="$AWS_SECRET_ACCESS_KEY" \
             --dry-run=client -o yaml | kubectl apply -f -
           
           # Create a secret with email and hosted zone ID for the cluster issuer
+          echo "Creating configuration secret..."
           kubectl -n cert-manager create secret generic cert-manager-issuer-config \
             --from-literal=acme-email="$ACME_EMAIL" \
             --from-literal=hosted-zone-id="$AWS_HOSTED_ZONE_ID" \
@@ -202,7 +195,18 @@ jobs:
           
           echo "AWS Credentials and configuration secrets created in cert-manager namespace"
           
-          # Patch the ClusterIssuer if it exists (for upgrades/re-runs)
+          # Wait for cert-manager to be installed by ArgoCD
+          echo "Waiting for cert-manager pods to be ready..."
+          for i in {1..30}; do
+            if kubectl -n cert-manager get pods | grep -q "Running"; then
+              echo "cert-manager pods are running"
+              break
+            fi
+            echo "Waiting for cert-manager pods... ($i/30)"
+            sleep 10
+          done
+          
+          # Wait for the ClusterIssuer to be created and patch it
           echo "Waiting for ClusterIssuer to be created by ArgoCD..."
           for i in {1..30}; do
             if kubectl get clusterissuer letsencrypt-prod; then
@@ -227,6 +231,8 @@ jobs:
       AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
       AWS_DEFAULT_REGION: "ap-southeast-1"
+      ACME_EMAIL: ${{ secrets.ACME_EMAIL }}
+      AWS_HOSTED_ZONE_ID: ${{ secrets.AWS_HOSTED_ZONE_ID }}
 
     steps:
       - name: Checkout repository
@@ -263,6 +269,37 @@ jobs:
         env:
           KUBECONFIG: ./kubeconfig
         run: kubectl apply -f ./apps/app-of-apps.yaml
+        
+      - name: Wait for ClusterIssuer and patch with credentials
+        env:
+          KUBECONFIG: ./kubeconfig
+        run: |
+          # Wait for cert-manager to be installed by ArgoCD
+          echo "Waiting for cert-manager pods to be ready..."
+          for i in {1..30}; do
+            if kubectl -n cert-manager get pods | grep -q "Running"; then
+              echo "cert-manager pods are running"
+              break
+            fi
+            echo "Waiting for cert-manager pods... ($i/30)"
+            sleep 10
+          done
+          
+          # Wait for the ClusterIssuer to be created and patch it
+          echo "Waiting for ClusterIssuer to be created by ArgoCD..."
+          for i in {1..30}; do
+            if kubectl get clusterissuer letsencrypt-prod; then
+              echo "Patching ClusterIssuer with credentials..."
+              kubectl patch clusterissuer letsencrypt-prod --type=json -p='[
+                {"op": "replace", "path": "/spec/acme/email", "value": "'"$ACME_EMAIL"'"},
+                {"op": "replace", "path": "/spec/acme/solvers/0/dns01/route53/hostedZoneID", "value": "'"$AWS_HOSTED_ZONE_ID"'"},
+                {"op": "replace", "path": "/spec/acme/solvers/0/dns01/route53/accessKeyID", "value": "'"$AWS_ACCESS_KEY_ID"'"}
+              ]'
+              break
+            fi
+            echo "Waiting for ClusterIssuer... ($i/30)"
+            sleep 10
+          done
 
   dns-management:
     needs: [terraform-infra]
