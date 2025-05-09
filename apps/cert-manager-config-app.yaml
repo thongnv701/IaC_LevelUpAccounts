@@ -1,0 +1,32 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: cert-manager-config
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "1" # Make sure this runs after cert-manager (wave 0)
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/thongnv701/IaC_LevelUpAccounts.git
+    targetRevision: main
+    path: helm/cert-manager
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: cert-manager
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ApplyOutOfSyncOnly=true # Only apply if it's out of sync
+  # Add dependency on the cert-manager app so it installs after
+  ignoreDifferences:
+  - group: cert-manager.io
+    kind: ClusterIssuer
+    jsonPointers:
+    - /spec/acme/solvers/0/dns01/route53/accessKeyID
+    - /spec/acme/solvers/0/dns01/route53/secretAccessKeySecretRef
+    - /spec/acme/email
+    - /spec/acme/solvers/0/dns01/route53/hostedZoneID 

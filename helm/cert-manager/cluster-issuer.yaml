@@ -5,15 +5,15 @@ metadata:
 spec:
   acme:
     server: https://acme-v02.api.letsencrypt.org/directory
-    email: your-email@example.com
+    email: "placeholder@example.com"  # This will be replaced by the secret
     privateKeySecretRef:
       name: letsencrypt-prod
     solvers:
     - dns01:
         route53:
           region: ap-southeast-1
-          hostedZoneID: YOUR_HOSTED_ZONE_ID
-          accessKeyID: YOUR_AWS_ACCESS_KEY_ID  # Replace with your AWS access key
+          hostedZoneID: "placeholder"  # This will be replaced by the secret
+          accessKeyID: "placeholder"   # This will be replaced by the secret
           secretAccessKeySecretRef:
             name: route53-credentials-secret
             key: secret-access-key 

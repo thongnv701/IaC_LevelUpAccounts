@@ -140,7 +140,7 @@ jobs:
           terraform apply -target=helm_release.argocd -auto-approve
           terraform apply -target=null_resource.wait_for_argocd -auto-approve
 
-  cert-manager-setup:
+  aws-secret-setup:
     needs: argocd-install
     if: ${{ always() && (needs.argocd-install.result == 'success' || needs.argocd-install.result == 'skipped') && github.event.inputs.deploy_cert_manager == 'true' }}
     runs-on: ubuntu-latest
@@ -149,6 +149,8 @@ jobs:
       AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
       AWS_DEFAULT_REGION: "ap-southeast-1"
+      ACME_EMAIL: ${{ secrets.ACME_EMAIL }}
+      AWS_HOSTED_ZONE_ID: ${{ secrets.AWS_HOSTED_ZONE_ID }}
 
     steps:
       - name: Checkout repository
@@ -164,90 +166,61 @@ jobs:
       - name: Download kubeconfig from S3
         run: aws s3 cp s3://my-terraform-backup-0701/kubeconfig ./kubeconfig.yaml
 
-      - name: Create AWS credentials secret
-        run: |
-          cat <<EOF > helm/cert-manager/aws-secret.yaml
-          apiVersion: v1
-          kind: Secret
-          metadata:
-            name: route53-credentials-secret
-            namespace: cert-manager
-          type: Opaque
-          stringData:
-            secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          EOF
-
-      - name: Create ClusterIssuer
-        run: |
-          cat <<EOF > helm/cert-manager/cluster-issuer.yaml
-          apiVersion: cert-manager.io/v1
-          kind: ClusterIssuer
-          metadata:
-            name: letsencrypt-prod
-          spec:
-            acme:
-              server: https://acme-v02.api.letsencrypt.org/directory
-              email: ${{ secrets.ACME_EMAIL }}
-              privateKeySecretRef:
-                name: letsencrypt-prod
-              solvers:
-              - dns01:
-                  route53:
-                    region: ap-southeast-1
-                    hostedZoneID: ${{ secrets.AWS_HOSTED_ZONE_ID }}
-                    accessKeyID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-                    secretAccessKeySecretRef:
-                      name: route53-credentials-secret
-                      key: secret-access-key
-          EOF
-
       - name: Set up kubectl
         uses: azure/setup-kubectl@v3
         with:
           version: 'latest'
 
-      - name: Install Helm
-        uses: azure/setup-helm@v3
-        with:
-          version: 'latest'
-
-      - name: Create cert-manager namespace
+      - name: Create and apply AWS credentials secret
         env:
           KUBECONFIG: ./kubeconfig.yaml
         run: |
+          # Wait for cert-manager namespace to be created by ArgoCD
+          echo "Waiting for cert-manager namespace to be ready..."
+          for i in {1..30}; do
+            if kubectl get namespace cert-manager; then
+              break
+            fi
+            echo "Waiting for cert-manager namespace... ($i/30)"
+            sleep 10
+          done
+          
+          # Create namespace if it doesn't exist
           kubectl create namespace cert-manager --dry-run=client -o yaml | kubectl apply -f -
-
-      - name: Install cert-manager
-        env:
-          KUBECONFIG: ./kubeconfig.yaml
-        run: |
-          # Add the Jetstack Helm repository
-          helm repo add jetstack https://charts.jetstack.io
-          helm repo update
           
-          # Install cert-manager with CRDs
-          helm install cert-manager jetstack/cert-manager \
-            --namespace cert-manager \
-            --create-namespace \
-            --set installCRDs=true \
-            --version v1.11.0 \
-            --wait
-
-      - name: Apply cert-manager configuration
-        env:
-          KUBECONFIG: ./kubeconfig.yaml
-        run: |
-          kubectl apply -f helm/cert-manager/aws-secret.yaml
-          kubectl apply -f helm/cert-manager/cluster-issuer.yaml
+          # Create AWS credentials secret for Route53 DNS01 challenge
+          kubectl -n cert-manager create secret generic route53-credentials-secret \
+            --from-literal=secret-access-key="$AWS_SECRET_ACCESS_KEY" \
+            --dry-run=client -o yaml | kubectl apply -f -
           
-          # Wait for ClusterIssuer to be ready
-          echo "Waiting for ClusterIssuer to be ready..."
-          sleep 10
-          kubectl get clusterissuer letsencrypt-prod -o wide
+          # Create a secret with email and hosted zone ID for the cluster issuer
+          kubectl -n cert-manager create secret generic cert-manager-issuer-config \
+            --from-literal=acme-email="$ACME_EMAIL" \
+            --from-literal=hosted-zone-id="$AWS_HOSTED_ZONE_ID" \
+            --from-literal=access-key-id="$AWS_ACCESS_KEY_ID" \
+            --dry-run=client -o yaml | kubectl apply -f -
+          
+          echo "AWS Credentials and configuration secrets created in cert-manager namespace"
+          
+          # Patch the ClusterIssuer if it exists (for upgrades/re-runs)
+          echo "Waiting for ClusterIssuer to be created by ArgoCD..."
+          for i in {1..30}; do
+            if kubectl get clusterissuer letsencrypt-prod; then
+              echo "Patching ClusterIssuer with credentials..."
+              kubectl patch clusterissuer letsencrypt-prod --type=json -p='[
+                {"op": "replace", "path": "/spec/acme/email", "value": "'"$ACME_EMAIL"'"},
+                {"op": "replace", "path": "/spec/acme/solvers/0/dns01/route53/hostedZoneID", "value": "'"$AWS_HOSTED_ZONE_ID"'"},
+                {"op": "replace", "path": "/spec/acme/solvers/0/dns01/route53/accessKeyID", "value": "'"$AWS_ACCESS_KEY_ID"'"}
+              ]'
+              break
+            fi
+            echo "Waiting for ClusterIssuer... ($i/30)"
+            sleep 10
+          done
 
   app-of-apps-deploy:
-    needs: [cert-manager-setup]
-    if: ${{ always() && (needs.cert-manager-setup.result == 'success' || needs.cert-manager-setup.result == 'skipped') && github.event.inputs.deploy_app_of_apps == 'true' }}
+    needs: [aws-secret-setup]
+    if: ${{ always() && (needs.aws-secret-setup.result == 'success' || needs.aws-secret-setup.result == 'skipped') && github.event.inputs.deploy_app_of_apps == 'true' }}
     runs-on: ubuntu-latest
     environment: terraform
     env:
@@ -328,12 +301,12 @@ jobs:
         run: |
           terraform apply -target=data.aws_route53_zone.main -target=data.aws_instances.k3s_instances -target=aws_route53_record.service_records -auto-approve
           
-          # Output the created DNS records
+          # Output the created DNS records more reliably without using jq
           echo "DNS entries updated through Terraform:"
-          terraform output -json dns_records | jq -r 'to_entries[] | "- \(.key) -> \(.value)"'
+          terraform output dns_records | sed 's/{//g' | sed 's/}//g' | sed 's/"//g' | tr -d '\n' | sed 's/,/\n/g'
 
   deployment-summary:
-    needs: [terraform-infra, nginx-ingress, argocd-install, cert-manager-setup, app-of-apps-deploy, dns-management]
+    needs: [terraform-infra, nginx-ingress, argocd-install, aws-secret-setup, app-of-apps-deploy, dns-management]
     if: always()
     runs-on: ubuntu-latest
     steps:
@@ -346,12 +319,12 @@ jobs:
           echo "| Terraform Infrastructure | ${{ needs.terraform-infra.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Nginx Ingress | ${{ needs.nginx-ingress.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| ArgoCD Installation | ${{ needs.argocd-install.result }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Cert Manager | ${{ needs.cert-manager-setup.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| AWS Secret Setup | ${{ needs.aws-secret-setup.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| App of Apps | ${{ needs.app-of-apps-deploy.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| DNS Management | ${{ needs.dns-management.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           
-          if [[ "${{ needs.terraform-infra.result }}" == "success" && "${{ needs.nginx-ingress.result }}" == "success" && "${{ needs.argocd-install.result }}" == "success" && "${{ needs.cert-manager-setup.result }}" == "success" && "${{ needs.app-of-apps-deploy.result }}" == "success" && "${{ needs.dns-management.result }}" == "success" ]]; then
+          if [[ "${{ needs.terraform-infra.result }}" == "success" && "${{ needs.nginx-ingress.result }}" == "success" && "${{ needs.argocd-install.result }}" == "success" && "${{ needs.aws-secret-setup.result }}" == "success" && "${{ needs.app-of-apps-deploy.result }}" == "success" && "${{ needs.dns-management.result }}" == "success" ]]; then
             echo "✅ **Complete deployment successful!**" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
             echo "You can now access:" >> $GITHUB_STEP_SUMMARY

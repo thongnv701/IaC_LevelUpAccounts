@@ -9,6 +9,9 @@ spec:
     repoURL: https://github.com/thongnv701/IaC_LevelUpAccounts.git
     targetRevision: main
     path: apps
+    directory:
+      include: "*-app.yaml"
+      exclude: "app-of-apps.yaml"
   destination:
     server: https://kubernetes.default.svc
     namespace: argocd
