@@ -6,7 +6,7 @@ resource "local_file" "private_key" {
 
 resource "aws_instance" "k3s_master" {
   ami                         = var.ami
-  instance_type               = var.instance_type
+  instance_type               = var.master_instance_type
   key_name                    = var.key_name
   subnet_id                   = var.subnet_id
   vpc_security_group_ids      = [var.security_group_id]
@@ -52,7 +52,7 @@ resource "null_resource" "fetch_kubeconfig" {
 resource "aws_instance" "k3s_worker" {
   count                       = var.worker_count
   ami                         = var.ami
-  instance_type               = var.instance_type
+  instance_type               = var.worker_instance_type
   key_name                    = var.key_name
   subnet_id                   = var.subnet_id
   vpc_security_group_ids      = [var.security_group_id]
