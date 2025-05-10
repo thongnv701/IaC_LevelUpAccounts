@@ -188,11 +188,11 @@ jobs:
           kubectl --kubeconfig=./modules/compute/kubeconfig create secret generic github-token \
             --namespace argocd \
             --from-literal=token="$GITHUB_TOKEN" \
-            --dry-run=client -o yaml | kubectl apply -f -
+            --dry-run=client -o yaml | kubectl --kubeconfig=./modules/compute/kubeconfig apply -f -
           
           # Update ArgoCD ConfigMap
           kubectl --kubeconfig=./modules/compute/kubeconfig patch configmap argocd-cm -n argocd \
-            --type merge -p '{"data":{"github-token":"$GITHUB_TOKEN"}}'
+            --type merge -p '{"data":{"github-token":"'"$GITHUB_TOKEN"'"}}'
           
           # Wait for ArgoCD to be ready
           echo "Waiting for ArgoCD to be ready..."
@@ -200,7 +200,7 @@ jobs:
           
           # Patch the application
           kubectl --kubeconfig=./modules/compute/kubeconfig patch application level-up-accounts-api -n argocd \
-            --type merge -p '{"spec":{"source":{"kustomize":{"patches":[{"target":{"kind":"Secret","name":"github-auth"},"patch":"- op: replace\n  path: /stringData/token\n  value: ${GITHUB_TOKEN}"}]}}}}'
+            --type merge -p '{"spec":{"source":{"kustomize":{"patches":[{"target":{"kind":"Secret","name":"github-auth"},"patch":"- op: replace\n  path: /stringData/token\n  value: '"$GITHUB_TOKEN"'"}]}}}}'
           
           echo "GitHub token setup completed"
 
