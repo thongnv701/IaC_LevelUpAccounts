@@ -10,8 +10,8 @@ spec:
     targetRevision: main
     path: apps
     directory:
-      include: "level-up-accounts/*.yaml"
-      exclude: "app-of-apps.yaml"
+      # include: "**/*-app.yaml"
+      # exclude: "app-of-apps.yaml"
       recurse: true
   destination:
     server: https://kubernetes.default.svc
