@@ -149,8 +149,28 @@ jobs:
           # Wait for ArgoCD to be ready
           kubectl --kubeconfig=./modules/compute/kubeconfig -n argocd rollout status deployment argocd-server --timeout=300s
           
+          # Wait for the initial admin password secret to be created
+          echo "Waiting for ArgoCD initial admin password secret..."
+          for i in {1..30}; do
+            if kubectl --kubeconfig=./modules/compute/kubeconfig -n argocd get secret argocd-initial-admin-password &>/dev/null; then
+              echo "Found initial admin password secret"
+              break
+            fi
+            echo "Waiting for initial admin password secret... ($i/30)"
+            sleep 10
+          done
+          
           # Get the initial admin password
           INITIAL_PASSWORD=$(kubectl --kubeconfig=./modules/compute/kubeconfig -n argocd get secret argocd-initial-admin-password -o jsonpath="{.data.password}" | base64 -d)
+          
+          if [ -z "$INITIAL_PASSWORD" ]; then
+            echo "Error: Could not retrieve initial admin password"
+            echo "Checking ArgoCD pods status..."
+            kubectl --kubeconfig=./modules/compute/kubeconfig -n argocd get pods
+            echo "Checking ArgoCD secrets..."
+            kubectl --kubeconfig=./modules/compute/kubeconfig -n argocd get secrets
+            exit 1
+          fi
           
           # Save password to environment variable
           echo "ARGOCD_INITIAL_PASSWORD=$INITIAL_PASSWORD" >> $GITHUB_ENV
