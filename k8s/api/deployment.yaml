@@ -33,8 +33,6 @@ spec:
       containers:
       - name: api
         image: docker.io/thongnv0701/levelupaccounts:latest
-        command: ["dotnet"]
-        args: ["LevelUpAccounts.API.dll"]
         workingDir: /app
         ports:
         - containerPort: 8080
