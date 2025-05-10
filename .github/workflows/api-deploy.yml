@@ -1,0 +1,37 @@
+name: Deploy App of Apps
+
+on:
+  workflow_dispatch:
+
+jobs:
+  deploy-app-of-apps:
+    runs-on: ubuntu-latest
+    environment: terraform
+
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      AWS_DEFAULT_REGION: "ap-southeast-1"
+
+    steps:
+        - name: Checkout repository
+          uses: actions/checkout@v3
+
+        - name: Install AWS CLI
+          run: |
+            pip install --upgrade pip
+            pip install awscli
+
+        - name: Download kubeconfig from S3
+          run: aws s3 cp s3://my-terraform-backup-0701/kubeconfig ./kubeconfig
+
+        - name: Install kubectl
+          run: |
+            curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+            chmod +x kubectl
+            sudo mv kubectl /usr/local/bin/
+
+        - name: Apply app-of-apps.yaml
+          env:
+            KUBECONFIG: ${{ github.workspace }}/kubeconfig
+          run: kubectl apply -f .apps/level-up-accounts/api-app.yaml
