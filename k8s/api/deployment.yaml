@@ -37,8 +37,7 @@ spec:
         - containerPort: 8080
         volumeMounts:
         - name: app-config
-          mountPath: /app/appsettings.json
-          subPath: appsettings.json
+          mountPath: /app
         env:
         - name: ASPNETCORE_ENVIRONMENT
           value: "Production"
