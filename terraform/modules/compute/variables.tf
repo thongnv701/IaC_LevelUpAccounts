@@ -1,5 +1,6 @@
 variable "ami" {}
-variable "instance_type" {}
+variable "master_instance_type" {}
+variable "worker_instance_type" {}
 variable "key_name" {}
 variable "subnet_id" {}
 variable "security_group_id" {}
