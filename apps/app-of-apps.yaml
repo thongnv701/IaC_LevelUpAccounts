@@ -10,7 +10,7 @@ spec:
     targetRevision: main
     path: apps
     directory:
-      include: "**/*-app.yaml"
+      include: "level-up-accounts/*.yaml"
       exclude: "app-of-apps.yaml"
       recurse: true
   destination:
