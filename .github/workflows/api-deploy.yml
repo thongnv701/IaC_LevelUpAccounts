@@ -1,4 +1,4 @@
-name: Deploy App of Apps
+name: Deploy App api
 
 on:
   workflow_dispatch:
