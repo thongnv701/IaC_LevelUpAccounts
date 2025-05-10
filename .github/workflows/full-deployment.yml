@@ -180,7 +180,7 @@ jobs:
       - name: Setup GitHub Token for ArgoCD
         working-directory: ./terraform
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GIT_TOKEN }}
         run: |
           echo "Setting up GitHub token for ArgoCD..."
           
