@@ -1,49 +1,49 @@
-name: Certificate Expiration Monitor
+# name: Certificate Expiration Monitor
 
-on:
-  schedule:
-    - cron: '0 0 * * *'  # Runs daily at midnight
-  workflow_dispatch:  # Allows manual triggering
+# on:
+#   schedule:
+#     - cron: '0 0 * * *'  # Runs daily at midnight
+#   workflow_dispatch:  # Allows manual triggering
 
-jobs:
-  check-expiration:
-    runs-on: ubuntu-latest
-    environment: terraform
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v3
+# jobs:
+#   check-expiration:
+#     runs-on: ubuntu-latest
+#     environment: terraform
+#     steps:
+#       - name: Checkout repository
+#         uses: actions/checkout@v3
 
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v2
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ secrets.AWS_REGION }}
+#       - name: Configure AWS credentials
+#         uses: aws-actions/configure-aws-credentials@v2
+#         with:
+#           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+#           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+#           aws-region: ${{ secrets.AWS_REGION }}
 
-      - name: Download kubeconfig from S3
-        run: aws s3 cp s3://my-terraform-backup-0701/kubeconfig ./kubeconfig.yaml
+#       - name: Download kubeconfig from S3
+#         run: aws s3 cp s3://my-terraform-backup-0701/kubeconfig ./kubeconfig.yaml
 
-      - name: Set up kubectl
-        uses: azure/setup-kubectl@v3
-        with:
-          version: 'latest'
+#       - name: Set up kubectl
+#         uses: azure/setup-kubectl@v3
+#         with:
+#           version: 'latest'
 
-      - name: Check certificate expiration
-        env:
-          KUBECONFIG: ./kubeconfig.yaml
-        run: |
-          # Get certificate expiration date
-          EXPIRY=$(kubectl get certificate -n argocd argocd-tls -o jsonpath='{.status.notAfter}')
+#       - name: Check certificate expiration
+#         env:
+#           KUBECONFIG: ./kubeconfig.yaml
+#         run: |
+#           # Get certificate expiration date
+#           EXPIRY=$(kubectl get certificate -n argocd argocd-tls -o jsonpath='{.status.notAfter}')
           
-          # Calculate days until expiration
-          EXPIRY_DATE=$(date -d "$EXPIRY" +%s)
-          CURRENT_DATE=$(date +%s)
-          DAYS_LEFT=$(( ($EXPIRY_DATE - $CURRENT_DATE) / 86400 ))
+#           # Calculate days until expiration
+#           EXPIRY_DATE=$(date -d "$EXPIRY" +%s)
+#           CURRENT_DATE=$(date +%s)
+#           DAYS_LEFT=$(( ($EXPIRY_DATE - $CURRENT_DATE) / 86400 ))
           
-          # Alert if less than 30 days remaining
-          if [ $DAYS_LEFT -lt 30 ]; then
-            echo "WARNING: Certificate expires in $DAYS_LEFT days"
-            exit 1
-          else
-            echo "Certificate is valid for $DAYS_LEFT days"
-          fi 
+#           # Alert if less than 30 days remaining
+#           if [ $DAYS_LEFT -lt 30 ]; then
+#             echo "WARNING: Certificate expires in $DAYS_LEFT days"
+#             exit 1
+#           else
+#             echo "Certificate is valid for $DAYS_LEFT days"
+#           fi 
