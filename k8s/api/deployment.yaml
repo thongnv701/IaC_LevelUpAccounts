@@ -1,0 +1,92 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: level-up-accounts-api
+  namespace: level-up-accounts
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: level-up-accounts-api
+  template:
+    metadata:
+      labels:
+        app: level-up-accounts-api
+    spec:
+      initContainers:
+      - name: fetch-config
+        image: curlimages/curl:latest
+        command: 
+        - /bin/sh
+        - -c
+        - |
+          curl -H "Authorization: token $(cat /etc/github/token)" \
+               -H "Accept: application/vnd.github.v3.raw" \
+               -L https://api.github.com/repos/thongnv701/secret-key/contents/levelupaccounts/appsettings.json \
+               -o /app/appsettings.json
+        volumeMounts:
+        - name: app-config
+          mountPath: /app
+        - name: github-auth
+          mountPath: /etc/github
+          readOnly: true
+      containers:
+      - name: api
+        image: docker.io/thongnv0701/levelupaccounts:latest
+        ports:
+        - containerPort: 80
+        volumeMounts:
+        - name: app-config
+          mountPath: /app/appsettings.json
+          subPath: appsettings.json
+        env:
+        - name: ASPNETCORE_ENVIRONMENT
+          value: "Production"
+        - name: ConnectionStrings__LevelUpAccountsDb
+          valueFrom:
+            secretKeyRef:
+              name: level-up-accounts-secrets
+              key: connection-string
+        - name: JwtSettings__Key
+          valueFrom:
+            secretKeyRef:
+              name: level-up-accounts-secrets
+              key: jwt-key
+        - name: JwtSettings__Issuer
+          valueFrom:
+            secretKeyRef:
+              name: level-up-accounts-secrets
+              key: jwt-issuer
+        - name: JwtSettings__Audience
+          valueFrom:
+            secretKeyRef:
+              name: level-up-accounts-secrets
+              key: jwt-audience
+        resources:
+          requests:
+            cpu: "100m"
+            memory: "128Mi"
+          limits:
+            cpu: "500m"
+            memory: "256Mi"
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 80
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 80
+          initialDelaySeconds: 15
+          periodSeconds: 20
+      volumes:
+      - name: app-config
+        emptyDir: {}
+      - name: github-auth
+        secret:
+          secretName: github-auth
+          items:
+          - key: token
+            path: token 

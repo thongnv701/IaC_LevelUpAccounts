@@ -1,0 +1,36 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: level-up-accounts-api
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/thongnv701/level-up-accounts.git
+    targetRevision: HEAD
+    path: k8s/api
+    kustomize:
+      version: v4.5.7
+      images:
+        - name: level-up-accounts-api
+          newName: thongnv0701/levelupaccount
+          newTag: latest
+      commonAnnotations:
+        argocd.argoproj.io/sync-wave: "0"
+      patches:
+        - target:
+            kind: Secret
+            name: github-auth
+          patch: |
+            - op: replace
+              path: /stringData/token
+              value: ${GITHUB_TOKEN}
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: level-up-accounts
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true 

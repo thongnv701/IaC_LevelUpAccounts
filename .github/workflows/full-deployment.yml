@@ -177,6 +177,33 @@ jobs:
           echo "aws s3 cp s3://my-terraform-backup-0701/argocd-admin-password.txt -"
           echo "-----------------------------------------------"
 
+      - name: Setup GitHub Token for ArgoCD
+        working-directory: ./terraform
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "Setting up GitHub token for ArgoCD..."
+          
+          # Create GitHub token secret
+          kubectl --kubeconfig=./modules/compute/kubeconfig create secret generic github-token \
+            --namespace argocd \
+            --from-literal=token="$GITHUB_TOKEN" \
+            --dry-run=client -o yaml | kubectl apply -f -
+          
+          # Update ArgoCD ConfigMap
+          kubectl --kubeconfig=./modules/compute/kubeconfig patch configmap argocd-cm -n argocd \
+            --type merge -p '{"data":{"github-token":"$GITHUB_TOKEN"}}'
+          
+          # Wait for ArgoCD to be ready
+          echo "Waiting for ArgoCD to be ready..."
+          kubectl --kubeconfig=./modules/compute/kubeconfig wait --for=condition=available --timeout=300s deployment/argocd-server -n argocd
+          
+          # Patch the application
+          kubectl --kubeconfig=./modules/compute/kubeconfig patch application level-up-accounts-api -n argocd \
+            --type merge -p '{"spec":{"source":{"kustomize":{"patches":[{"target":{"kind":"Secret","name":"github-auth"},"patch":"- op: replace\n  path: /stringData/token\n  value: ${GITHUB_TOKEN}"}]}}}}'
+          
+          echo "GitHub token setup completed"
+
   aws-secret-setup:
     needs: argocd-install
     if: ${{ always() && (needs.argocd-install.result == 'success' || needs.argocd-install.result == 'skipped') && github.event.inputs.deploy_cert_manager == 'true' }}

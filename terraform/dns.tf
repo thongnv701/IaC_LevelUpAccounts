@@ -34,7 +34,8 @@ locals {
   # Define all the domains we want to manage
   managed_domains = [
     "argocd.thongit.space",
-    "grafana.thongit.space"
+    "grafana.thongit.space",
+    "api.thongit.space"
   ]
 }
 
