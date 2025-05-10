@@ -34,4 +34,4 @@ jobs:
         - name: Apply app-of-apps.yaml
           env:
             KUBECONFIG: ${{ github.workspace }}/kubeconfig
-          run: kubectl apply -f .apps/level-up-accounts/api-app.yaml
+          run: kubectl apply -f ./apps/level-up-accounts/api-app.yaml
