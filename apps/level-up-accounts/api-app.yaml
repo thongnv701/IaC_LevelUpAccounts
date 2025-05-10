@@ -12,9 +12,7 @@ spec:
     kustomize:
       version: v4.5.7
       images:
-        - name: level-up-accounts-api
-          newName: thongnv0701/levelupaccount
-          newTag: latest
+        - thongnv0701/levelupaccount:latest
       commonAnnotations:
         argocd.argoproj.io/sync-wave: "0"
       patches:
