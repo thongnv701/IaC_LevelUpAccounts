@@ -62,6 +62,7 @@ configs:
   # Enable initial admin password
   secret:
     argocdServerAdminPassword: ""  # Empty string means generate random password
+    createSecret: true  # Ensure the secret is created
 
   params:
     server.insecure: false  # Should be false when using TLS

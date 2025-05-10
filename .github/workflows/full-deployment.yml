@@ -160,6 +160,17 @@ jobs:
             sleep 10
           done
           
+          # If secret doesn't exist, create it with a random password
+          if ! kubectl --kubeconfig=./modules/compute/kubeconfig -n argocd get secret argocd-initial-admin-password &>/dev/null; then
+            echo "Initial admin password secret not found, creating it..."
+            # Generate a random password
+            RANDOM_PASSWORD=$(openssl rand -base64 16)
+            # Create the secret
+            kubectl --kubeconfig=./modules/compute/kubeconfig -n argocd create secret generic argocd-initial-admin-password \
+              --from-literal=password="$RANDOM_PASSWORD"
+            echo "Created initial admin password secret"
+          fi
+          
           # Get the initial admin password
           INITIAL_PASSWORD=$(kubectl --kubeconfig=./modules/compute/kubeconfig -n argocd get secret argocd-initial-admin-password -o jsonpath="{.data.password}" | base64 -d)
           
