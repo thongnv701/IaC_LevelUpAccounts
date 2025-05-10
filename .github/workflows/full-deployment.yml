@@ -108,7 +108,7 @@ jobs:
     runs-on: ubuntu-latest
     environment: terraform
     outputs:
-      ARGOCD_ADMIN_PASSWORD: ${{ env.ARGOCD_ADMIN_PASSWORD_PLAIN }}
+      ARGOCD_INITIAL_PASSWORD: ${{ env.ARGOCD_INITIAL_PASSWORD }}
     env:
       AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
@@ -119,32 +119,10 @@ jobs:
       TF_VAR_rds_username: ${{ secrets.RDS_USERNAME }}
       TF_VAR_rds_password: ${{ secrets.RDS_PASSWORD }}
       TF_VAR_route53_zone_id: ${{ secrets.ROUTE53_ZONE_ID }}
-      # Use default ArgoCD admin password from secrets, or use a fixed one
-      ARGOCD_ADMIN_PASSWORD: ${{ secrets.ARGOCD_ADMIN_PASSWORD || 'admin123!' }}
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
-
-      - name: Generate ArgoCD bcrypt password hash
-        id: generate_password
-        run: |
-          # Install required packages
-          sudo apt-get update
-          sudo apt-get install -y apache2-utils
-          
-          # Generate bcrypt hash for the password
-          PASSWORD_HASH=$(htpasswd -bnBC 10 "" "$ARGOCD_ADMIN_PASSWORD" | tr -d ':\n' | cut -c 2-)
-          
-          # Save the hash as an environment variable for terraform
-          echo "TF_VAR_argocd_admin_password=$PASSWORD_HASH" >> $GITHUB_ENV
-          
-          # Save the plaintext password to be displayed at the end of the workflow
-          echo "ARGOCD_ADMIN_PASSWORD_PLAIN=$ARGOCD_ADMIN_PASSWORD" >> $GITHUB_ENV
-          
-          # Output information about the password (excluding the hash for security)
-          echo "Generated bcrypt hash for ArgoCD admin password"
-          echo "You will be able to log in with username: admin and password: $ARGOCD_ADMIN_PASSWORD"
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v1
@@ -161,108 +139,39 @@ jobs:
       - name: Install ArgoCD via Terraform
         working-directory: ./terraform
         run: |
-          echo "Setting ArgoCD admin password..."
-          echo "Using password hash: ${TF_VAR_argocd_admin_password:0:10}... (truncated for security)"
-          
           # Apply ArgoCD installation
           terraform apply -target=helm_release.argocd -auto-approve
           terraform apply -target=null_resource.wait_for_argocd -auto-approve
+
+      - name: Get and Store Initial Admin Password
+        working-directory: ./terraform
+        run: |
+          # Wait for ArgoCD to be ready
+          kubectl --kubeconfig=./modules/compute/kubeconfig -n argocd rollout status deployment argocd-server --timeout=300s
           
-          # Display login information
+          # Get the initial admin password
+          INITIAL_PASSWORD=$(kubectl --kubeconfig=./modules/compute/kubeconfig -n argocd get secret argocd-initial-admin-password -o jsonpath="{.data.password}" | base64 -d)
+          
+          # Save password to environment variable
+          echo "ARGOCD_INITIAL_PASSWORD=$INITIAL_PASSWORD" >> $GITHUB_ENV
+          
+          # Save password to file
+          echo "$INITIAL_PASSWORD" > argocd-admin-password.txt
+          
+          # Upload to S3
+          aws s3 cp argocd-admin-password.txt s3://my-terraform-backup-0701/argocd-admin-password.txt
+          
+          # Clean up local file
+          rm argocd-admin-password.txt
+          
           echo "-----------------------------------------------"
           echo "ArgoCD has been deployed successfully!"
           echo "You can log in with:"
           echo "URL: https://argocd.thongit.space"
           echo "Username: admin"
-          echo "Password: $ARGOCD_ADMIN_PASSWORD_PLAIN"
+          echo "Initial Password: $INITIAL_PASSWORD"
           echo "-----------------------------------------------"
-          
-          # Add a step to diagnose the password
-          echo "Checking ArgoCD admin password..."
-          kubectl --kubeconfig=./modules/compute/kubeconfig -n argocd get secret argocd-initial-admin-password -o jsonpath="{.data.password}" 2>/dev/null | base64 -d || echo "Initial admin password secret not found"
-          
-          # Check if any other secret potentially contains the password
-          echo "Checking ArgoCD secrets..."
-          kubectl --kubeconfig=./modules/compute/kubeconfig -n argocd get secret | grep argocd
-          
-      - name: Ensure ArgoCD admin password is set directly (backup method)
-        working-directory: ./terraform
-        run: |
-          echo "Setting ArgoCD admin password directly as a fallback..."
-          
-          # Generate bcrypt hash
-          sudo apt-get update
-          sudo apt-get install -y apache2-utils
-          PASSWORD_HASH=$(htpasswd -bnBC 10 "" "$ARGOCD_ADMIN_PASSWORD" | tr -d ':\n' | cut -c 2-)
-          
-          # Check if argocd-secret exists
-          if kubectl --kubeconfig=./modules/compute/kubeconfig -n argocd get secret argocd-secret &>/dev/null; then
-            echo "Patching existing argocd-secret with new admin password..."
-            
-            # Encode values properly for the patch
-            ENCODED_PASSWORD=$(echo -n "$PASSWORD_HASH" | base64 -w 0)
-            ENCODED_TIMESTAMP=$(date +%FT%T%Z | base64 -w 0)
-            
-            # Create a proper patch file with correct YAML formatting
-            echo "data:" > argocd-secret-patch.yaml
-            echo "  admin.password: ${ENCODED_PASSWORD}" >> argocd-secret-patch.yaml
-            echo "  admin.passwordMtime: ${ENCODED_TIMESTAMP}" >> argocd-secret-patch.yaml
-            
-            # Apply the patch
-            kubectl --kubeconfig=./modules/compute/kubeconfig -n argocd patch secret argocd-secret --patch "$(cat argocd-secret-patch.yaml)"
-            
-            # Clean up
-            rm argocd-secret-patch.yaml
-          else
-            echo "Creating new argocd-secret with admin password..."
-            
-            # Create a new secret
-            kubectl --kubeconfig=./modules/compute/kubeconfig -n argocd create secret generic argocd-secret \
-              --from-literal=admin.password="$PASSWORD_HASH" \
-              --from-literal=admin.passwordMtime="$(date +%FT%T%Z)"
-          fi
-          
-          echo "ArgoCD admin password has been set directly."
-          echo "You can log in with:"
-          echo "Username: admin"
-          echo "Password: $ARGOCD_ADMIN_PASSWORD"
-          
-          # Restart the ArgoCD server to pick up the new password
-          echo "Restarting ArgoCD server to apply password change..."
-          kubectl --kubeconfig=./modules/compute/kubeconfig -n argocd rollout restart deployment argocd-server
-          
-          # Wait for server to be ready
-          kubectl --kubeconfig=./modules/compute/kubeconfig -n argocd rollout status deployment argocd-server --timeout=300s
-          
-          # As a last resort, use the ArgoCD CLI to reset the password directly
-          echo "Attempting to update the admin password using the ArgoCD CLI..."
-          
-          # Install ArgoCD CLI
-          curl -sSL -o /usr/local/bin/argocd https://github.com/argoproj/argo-cd/releases/latest/download/argocd-linux-amd64
-          chmod +x /usr/local/bin/argocd
-          
-          # Forward the ArgoCD API server port
-          kubectl --kubeconfig=./modules/compute/kubeconfig port-forward svc/argocd-server -n argocd 8080:443 &
-          PORT_FORWARD_PID=$!
-          sleep 5
-          
-          # Log in with the initial admin password and update it
-          INITIAL_PASSWORD=$(kubectl --kubeconfig=./modules/compute/kubeconfig -n argocd get secret argocd-initial-admin-password -o jsonpath="{.data.password}" 2>/dev/null | base64 -d)
-          
-          if [ -n "$INITIAL_PASSWORD" ]; then
-            echo "Found initial admin password, using it to update to new password..."
-            argocd login localhost:8080 --username admin --password "$INITIAL_PASSWORD" --insecure
-            argocd account update-password --current-password "$INITIAL_PASSWORD" --new-password "$ARGOCD_ADMIN_PASSWORD"
-            echo "Password updated using ArgoCD CLI."
-          else
-            echo "Could not find initial admin password, trying other methods..."
-            # Try other approaches to login
-            kubectl --kubeconfig=./modules/compute/kubeconfig -n argocd get pods
-            kubectl --kubeconfig=./modules/compute/kubeconfig -n argocd get secret
-          fi
-          
-          # Kill port forwarding
-          kill $PORT_FORWARD_PID || true
+          echo "Note: The initial admin password has been stored in S3 for future reference."
 
   aws-secret-setup:
     needs: argocd-install
@@ -578,7 +487,7 @@ jobs:
     runs-on: ubuntu-latest
     # Allow accessing environment variables from the argocd-install job
     env:
-      ARGOCD_ADMIN_PASSWORD: ${{ needs.argocd-install.outputs.ARGOCD_ADMIN_PASSWORD || 'Check logs in argocd-install step' }}
+      ARGOCD_INITIAL_PASSWORD: ${{ needs.argocd-install.outputs.ARGOCD_INITIAL_PASSWORD || 'Check logs in argocd-install step' }}
     steps:
       - name: Summarize Deployment
         run: |
@@ -601,7 +510,7 @@ jobs:
             echo "You can now access:" >> $GITHUB_STEP_SUMMARY
             echo "- ArgoCD: https://argocd.thongit.space" >> $GITHUB_STEP_SUMMARY
             echo "  - Username: admin" >> $GITHUB_STEP_SUMMARY
-            echo "  - Password: $ARGOCD_ADMIN_PASSWORD" >> $GITHUB_STEP_SUMMARY
+            echo "  - Initial Password: $ARGOCD_INITIAL_PASSWORD" >> $GITHUB_STEP_SUMMARY
             echo "- Grafana: https://grafana.thongit.space" >> $GITHUB_STEP_SUMMARY
           else
             echo "⚠️ **Deployment had some issues!**" >> $GITHUB_STEP_SUMMARY

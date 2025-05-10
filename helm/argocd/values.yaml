@@ -59,11 +59,6 @@ configs:
     exec.enabled: true
     admin.enabled: true
 
-  # Enable password management
-  secret:
-    # Explicitly create the secret for the admin password
-    createSecret: true
-
   params:
     server.insecure: false  # Should be false when using TLS
 
