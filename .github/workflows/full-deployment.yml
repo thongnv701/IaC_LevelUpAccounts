@@ -140,6 +140,46 @@ jobs:
           terraform apply -target=helm_release.argocd -auto-approve
           terraform apply -target=null_resource.wait_for_argocd -auto-approve
 
+      - name: Get and Store ArgoCD Initial Password
+        working-directory: ./terraform
+        run: |
+          # Wait for ArgoCD to be ready
+          kubectl --kubeconfig=./modules/compute/kubeconfig -n argocd rollout status deployment argocd-server --timeout=300s
+          
+          # Wait for initial admin password to be available
+          echo "Waiting for ArgoCD initial admin password..."
+          for i in {1..30}; do
+            if kubectl --kubeconfig=./modules/compute/kubeconfig -n argocd get secret argocd-initial-admin-password &>/dev/null; then
+              echo "Found initial admin password"
+              break
+            fi
+            echo "Waiting for initial admin password... ($i/30)"
+            sleep 10
+          done
+          
+          # Get the initial admin password
+          INITIAL_PASSWORD=$(kubectl --kubeconfig=./modules/compute/kubeconfig -n argocd get secret argocd-initial-admin-password -o jsonpath="{.data.password}" | base64 -d)
+          
+          if [ -z "$INITIAL_PASSWORD" ]; then
+            echo "Error: Could not retrieve initial admin password"
+            exit 1
+          fi
+          
+          # Save password to file
+          echo "$INITIAL_PASSWORD" > argocd-admin-password.txt
+          
+          # Upload to S3
+          aws s3 cp argocd-admin-password.txt s3://my-terraform-backup-0701/argocd-admin-password.txt
+          
+          # Clean up local file
+          rm argocd-admin-password.txt
+          
+          echo "-----------------------------------------------"
+          echo "ArgoCD initial admin password has been stored in S3"
+          echo "You can retrieve it using:"
+          echo "aws s3 cp s3://my-terraform-backup-0701/argocd-admin-password.txt -"
+          echo "-----------------------------------------------"
+
   aws-secret-setup:
     needs: argocd-install
     if: ${{ always() && (needs.argocd-install.result == 'success' || needs.argocd-install.result == 'skipped') && github.event.inputs.deploy_cert_manager == 'true' }}
