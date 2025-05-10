@@ -22,7 +22,7 @@ spec:
         - |
           curl -H "Authorization: token $(cat /etc/github/token)" \
                -H "Accept: application/vnd.github.v3.raw" \
-               -L https://github.com/thongnv701/secret-key/blob/main/levelupaccounts/appsettings.json \
+               -L https://api.github.com/repos/thongnv701/secret-key/contents/levelupaccounts/appsettings.json \
                -o /app/appsettings.json
         volumeMounts:
         - name: app-config
