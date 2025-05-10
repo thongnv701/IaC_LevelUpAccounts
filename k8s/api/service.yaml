@@ -7,7 +7,7 @@ spec:
   selector:
     app: level-up-accounts-api
   ports:
-  - port: 80
-    targetPort: 80
-    protocol: TCP
+    - protocol: TCP
+      port: 8080
+      targetPort: 8080
   type: ClusterIP 

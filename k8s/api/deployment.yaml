@@ -34,7 +34,7 @@ spec:
       - name: api
         image: docker.io/thongnv0701/levelupaccounts:latest
         ports:
-        - containerPort: 80
+        - containerPort: 8080
         volumeMounts:
         - name: app-config
           mountPath: /app/appsettings.json
@@ -72,13 +72,13 @@ spec:
         readinessProbe:
           httpGet:
             path: /health
-            port: 80
+            port: 8080
           initialDelaySeconds: 5
           periodSeconds: 10
         livenessProbe:
           httpGet:
             path: /health
-            port: 80
+            port: 8080
           initialDelaySeconds: 15
           periodSeconds: 20
       volumes:
