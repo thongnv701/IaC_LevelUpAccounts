@@ -42,26 +42,6 @@ spec:
         env:
         - name: ASPNETCORE_ENVIRONMENT
           value: "Production"
-        - name: ConnectionStrings__LevelUpAccountsDb
-          valueFrom:
-            secretKeyRef:
-              name: level-up-accounts-secrets
-              key: connection-string
-        - name: JwtSettings__Key
-          valueFrom:
-            secretKeyRef:
-              name: level-up-accounts-secrets
-              key: jwt-key
-        - name: JwtSettings__Issuer
-          valueFrom:
-            secretKeyRef:
-              name: level-up-accounts-secrets
-              key: jwt-issuer
-        - name: JwtSettings__Audience
-          valueFrom:
-            secretKeyRef:
-              name: level-up-accounts-secrets
-              key: jwt-audience
         resources:
           requests:
             cpu: "100m"
