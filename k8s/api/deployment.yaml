@@ -23,24 +23,24 @@ spec:
           curl -H "Authorization: token $(cat /etc/github/token)" \
                -H "Accept: application/vnd.github.v3.raw" \
                -L https://api.github.com/repos/thongnv701/secret-key/contents/levelupaccounts/appsettings.json \
-               -o /app/appsettings.json
+               -o /config/appsettings.json
         volumeMounts:
-        - name: app-config
-          mountPath: /app
+        - name: config-volume
+          mountPath: /config
         - name: github-auth
           mountPath: /etc/github
           readOnly: true
       containers:
       - name: api
         image: docker.io/thongnv0701/levelupaccounts:latest
-        command: ["/bin/sh"]
-        args: ["-c", "echo '=== Contents of /app ===' && ls -la /app && echo '=== Contents of /app/publish ===' && ls -la /app/publish 2>/dev/null || echo 'publish directory not found' && echo '=== Contents of /app/build ===' && ls -la /app/build 2>/dev/null || echo 'build directory not found' && echo '=== .NET Info ===' && dotnet --info && sleep 3600"]
+        command: ["dotnet"]
+        args: ["LevelUpAccounts.API.dll"]
         workingDir: /app
         ports:
         - containerPort: 8080
         volumeMounts:
-        - name: app-config
-          mountPath: /app
+        - name: config-volume
+          mountPath: /app/config
         env:
         - name: ASPNETCORE_ENVIRONMENT
           value: "Production"
@@ -53,8 +53,20 @@ spec:
           limits:
             cpu: "500m"
             memory: "256Mi"
+        readinessProbe:
+          httpGet:
+            path: /api/v1/ping
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        livenessProbe:
+          httpGet:
+            path: /api/v1/ping
+            port: 8080
+          initialDelaySeconds: 15
+          periodSeconds: 20
       volumes:
-      - name: app-config
+      - name: config-volume
         emptyDir: {}
       - name: github-auth
         secret:
