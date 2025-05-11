@@ -20,7 +20,8 @@ spec:
         - /bin/sh
         - -c
         - |
-          curl -H "Authorization: token $(cat /etc/github/token)" \
+          echo "Token first 4 chars: $(head -c 4 /etc/github/token)"
+          curl -v -H "Authorization: token $(cat /etc/github/token)" \
                -H "Accept: application/vnd.github.v3.raw" \
                -L https://api.github.com/repos/thongnv701/secret-key/contents/levelupaccounts/appsettings.json \
                -o /config/appsettings.json
