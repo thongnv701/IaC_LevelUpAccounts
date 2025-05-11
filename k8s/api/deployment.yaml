@@ -20,11 +20,24 @@ spec:
         - /bin/sh
         - -c
         - |
-          echo "Token first 4 chars: $(head -c 4 /etc/github/token)"
+          echo "=== Debugging Secret Mount ==="
+          echo "Checking /etc/github directory..."
+          ls -la /etc/github
+          echo "Checking token file..."
+          if [ -f /etc/github/token ]; then
+            echo "Token file exists"
+            echo "Token first 4 chars: $(head -c 4 /etc/github/token)"
+            echo "Token length: $(wc -c < /etc/github/token)"
+          else
+            echo "Token file does not exist!"
+          fi
+          echo "=== Attempting to fetch config ==="
           curl -v -H "Authorization: token $(cat /etc/github/token)" \
                -H "Accept: application/vnd.github.v3.raw" \
                -L https://api.github.com/repos/thongnv701/secret-key/contents/levelupaccounts/appsettings.json \
                -o /config/appsettings.json
+          echo "=== Config file contents ==="
+          cat /config/appsettings.json
         volumeMounts:
         - name: config-volume
           mountPath: /config
