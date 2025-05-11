@@ -33,8 +33,8 @@ spec:
       containers:
       - name: api
         image: docker.io/thongnv0701/levelupaccounts:latest
-        command: ["/bin/sh"]
-        args: ["-c", "echo '=== Contents of /app ===' && ls -la /app && echo '=== Contents of /app/config ===' && ls -la /app/config 2>/dev/null || echo 'config directory not found' && echo '=== Contents of /config ===' && ls -la /config 2>/dev/null || echo '/config not found' && echo '=== .NET Info ===' && dotnet --info && sleep 3600"]
+        command: ["dotnet"]
+        args: ["LevelUpAccounts.API.dll"]
         workingDir: /app
         ports:
         - containerPort: 8080
@@ -46,6 +46,8 @@ spec:
           value: "Production"
         - name: ASPNETCORE_URLS
           value: "http://+:8080"
+        - name: ASPNETCORE_CONFIGURATION_PATH
+          value: "/app/config/appsettings.json"
         resources:
           requests:
             cpu: "100m"
@@ -53,6 +55,18 @@ spec:
           limits:
             cpu: "500m"
             memory: "256Mi"
+        readinessProbe:
+          httpGet:
+            path: /api/v1/ping
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        livenessProbe:
+          httpGet:
+            path: /api/v1/ping
+            port: 8080
+          initialDelaySeconds: 15
+          periodSeconds: 20
       volumes:
       - name: config-volume
         emptyDir: {}
