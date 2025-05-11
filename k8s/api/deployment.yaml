@@ -28,16 +28,25 @@ spec:
             echo "Token file exists"
             echo "Token first 4 chars: $(head -c 4 /etc/github/token)"
             echo "Token length: $(wc -c < /etc/github/token)"
+            echo "Token content (first 10 chars): $(head -c 10 /etc/github/token)"
           else
             echo "Token file does not exist!"
+            exit 1
           fi
           echo "=== Attempting to fetch config ==="
-          curl -v -H "Authorization: token $(cat /etc/github/token)" \
+          TOKEN=$(cat /etc/github/token)
+          echo "Using token: ${TOKEN:0:4}..."
+          curl -v -H "Authorization: token $TOKEN" \
                -H "Accept: application/vnd.github.v3.raw" \
                -L https://api.github.com/repos/thongnv701/secret-key/contents/levelupaccounts/appsettings.json \
                -o /config/appsettings.json
-          echo "=== Config file contents ==="
-          cat /config/appsettings.json
+          if [ $? -eq 0 ]; then
+            echo "=== Config file contents ==="
+            cat /config/appsettings.json
+          else
+            echo "Failed to fetch config file"
+            exit 1
+          fi
         volumeMounts:
         - name: config-volume
           mountPath: /config
