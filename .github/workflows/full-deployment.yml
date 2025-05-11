@@ -394,19 +394,26 @@ jobs:
           echo "Waiting for level-up-accounts-api application to be created..."
           for i in {1..30}; do
             if kubectl get application level-up-accounts-api -n argocd &>/dev/null; then
-              echo "Application found, proceeding with patch..."
+              echo "Application found, proceeding with secret setup..."
               break
             fi
             echo "Waiting for application... ($i/30)"
             sleep 10
           done
           
-          # Patch the application if it exists
+          # Create or update the github-auth secret in the correct namespace
           if kubectl get application level-up-accounts-api -n argocd &>/dev/null; then
-            echo "Patching application with GitHub token..."
-            kubectl patch application level-up-accounts-api -n argocd \
-              --type merge -p '{"spec":{"source":{"kustomize":{"patches":[{"target":{"kind":"Secret","name":"github-auth"},"patch":"- op: replace\n  path: /stringData/token\n  value: '"$GITHUB_TOKEN"'"}]}}}}'
-            echo "Application patched successfully"
+            echo "Creating/updating github-auth secret in level-up-accounts namespace..."
+            # First ensure the namespace exists
+            kubectl create namespace level-up-accounts --dry-run=client -o yaml | kubectl apply -f -
+            
+            # Then create/update the secret
+            kubectl create secret generic github-auth \
+              --namespace level-up-accounts \
+              --from-literal=token="$GITHUB_TOKEN" \
+              --dry-run=client -o yaml | kubectl apply -f -
+            
+            echo "Secret created/updated successfully"
           else
             echo "Warning: level-up-accounts-api application not found after waiting. It may be created later by ArgoCD."
           fi
