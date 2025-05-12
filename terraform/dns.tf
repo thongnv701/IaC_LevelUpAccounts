@@ -17,36 +17,42 @@ resource "aws_acm_certificate" "service_certs" {
   }
 }
 
+locals {
+  # Flatten domain validation options
+  domain_validation_options = flatten([
+    for cert in aws_acm_certificate.service_certs : [
+      for dvo in cert.domain_validation_options : {
+        domain_name           = dvo.domain_name
+        resource_record_name  = dvo.resource_record_name
+        resource_record_value = dvo.resource_record_value
+        resource_record_type  = dvo.resource_record_type
+      }
+    ]
+  ])
+}
+
 # Create validation records for the certificates
 resource "aws_route53_record" "cert_validation" {
   for_each = {
-    for dvo in local.domain_validation_options : dvo.domain_name => {
-      name   = dvo.resource_record_name
-      record = dvo.resource_record_value
-      type   = dvo.resource_record_type
-    }
+    for dvo in local.domain_validation_options : dvo.domain_name => dvo
   }
 
   allow_overwrite = true
-  name            = each.value.name
-  records         = [each.value.record]
+  name            = each.value.resource_record_name
+  records         = [each.value.resource_record_value]
   ttl             = 60
-  type            = each.value.type
+  type            = each.value.resource_record_type
   zone_id         = data.aws_route53_zone.main.zone_id
-}
-
-locals {
-  domain_validation_options = flatten([
-    for cert in aws_acm_certificate.service_certs : cert.domain_validation_options
-  ])
 }
 
 # Validate the certificates
 resource "aws_acm_certificate_validation" "cert_validation" {
   for_each = aws_acm_certificate.service_certs
 
-  certificate_arn         = each.value.arn
-  validation_record_fqdns = [for record in aws_route53_record.cert_validation : record.fqdn if record.name == each.value.domain_validation_options[0].resource_record_name]
+  certificate_arn = each.value.arn
+  validation_record_fqdns = [
+    for dvo in each.value.domain_validation_options : aws_route53_record.cert_validation[dvo.domain_name].fqdn
+  ]
   
   timeouts {
     create = "45m"  # Increased timeout for DNS propagation
