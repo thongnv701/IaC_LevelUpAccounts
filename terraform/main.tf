@@ -27,6 +27,8 @@ module "compute" {
   subnet_id          = module.network.subnet_id
   security_group_id  = module.network.security_group_id
   private_key_content = var.private_key_content
+  http_target_group_arn = module.network.http_target_group_arn
+  https_target_group_arn = module.network.https_target_group_arn
   master_user_data   = <<-EOF
     #!/bin/bash
     set -e

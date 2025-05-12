@@ -23,3 +23,13 @@ output "alb_zone_id" {
   description = "The canonical hosted zone ID of the ALB"
   value       = aws_lb.k3s_alb.zone_id
 }
+
+output "http_target_group_arn" {
+  description = "ARN of the HTTP target group"
+  value       = aws_lb_target_group.k3s_http.arn
+}
+
+output "https_target_group_arn" {
+  description = "ARN of the HTTPS target group"
+  value       = aws_lb_target_group.k3s_https.arn
+}

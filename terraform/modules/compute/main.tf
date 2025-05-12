@@ -66,3 +66,31 @@ resource "aws_instance" "k3s_worker" {
     Name = "k3s-worker-${count.index}"
   }
 }
+
+# Register master node to target groups
+resource "aws_lb_target_group_attachment" "master_http" {
+  target_group_arn = var.http_target_group_arn
+  target_id        = aws_instance.k3s_master.id
+  port             = 30080
+}
+
+resource "aws_lb_target_group_attachment" "master_https" {
+  target_group_arn = var.https_target_group_arn
+  target_id        = aws_instance.k3s_master.id
+  port             = 30443
+}
+
+# Register worker nodes to target groups
+resource "aws_lb_target_group_attachment" "worker_http" {
+  count            = var.worker_count
+  target_group_arn = var.http_target_group_arn
+  target_id        = aws_instance.k3s_worker[count.index].id
+  port             = 30080
+}
+
+resource "aws_lb_target_group_attachment" "worker_https" {
+  count            = var.worker_count
+  target_group_arn = var.https_target_group_arn
+  target_id        = aws_instance.k3s_worker[count.index].id
+  port             = 30443
+}

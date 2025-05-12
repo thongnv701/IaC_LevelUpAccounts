@@ -9,3 +9,12 @@ variable "worker_user_data" {}
 variable "worker_count" { default = 2}
 variable "kubeconfig_fetch_script" {}
 variable "private_key_content" {}
+variable "http_target_group_arn" {
+  description = "ARN of the HTTP target group"
+  type        = string
+}
+
+variable "https_target_group_arn" {
+  description = "ARN of the HTTPS target group"
+  type        = string
+}
