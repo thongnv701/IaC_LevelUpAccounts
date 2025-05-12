@@ -12,8 +12,8 @@ module "network" {
 module "compute" {
   source             = "./modules/compute"
   ami                = "ami-05ab12222a9f39021"
-  master_instance_type      = "t3.small"
-  worker_instance_type      = "t2.small"
+  master_instance_type      = var.master_instance_type
+  worker_instance_type      = var.worker_instance_type
   key_name           = "aws-keypair-2"
   subnet_id          = module.network.subnet_id
   security_group_id  = module.network.security_group_id

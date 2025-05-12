@@ -34,3 +34,15 @@ variable "route53_elb_zone_id" {
   # Default value for ap-southeast-1 (Singapore) region
   default     = "Z1LMS91P8CMLE5"
 }
+
+variable "master_instance_type" {
+  description = "The instance type for the master node"
+  type        = string
+  default     = "t3.small"
+}
+
+variable "worker_instance_type" {
+  description = "The instance type for the worker node"
+  type        = string
+  default     = "t2.small"
+}

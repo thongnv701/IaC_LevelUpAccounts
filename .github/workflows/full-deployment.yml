@@ -32,6 +32,8 @@ jobs:
       TF_VAR_rds_username: ${{ secrets.RDS_USERNAME }}
       TF_VAR_rds_password: ${{ secrets.RDS_PASSWORD }}
       TF_VAR_route53_zone_id: ${{ secrets.ROUTE53_ZONE_ID }}
+      TF_VAR_master_instance_type: ${{ secrets.MASTER_INSTANCE_TYPE }}
+      TF_VAR_worker_instance_type: ${{ secrets.WORKER_INSTANCE_TYPE }}
       AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
       AWS_DEFAULT_REGION: "ap-southeast-1"
