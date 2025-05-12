@@ -46,3 +46,13 @@ variable "worker_instance_type" {
   type        = string
   default     = "t2.small"
 }
+
+variable "managed_domains" {
+  description = "List of domains to manage with DNS and SSL certificates"
+  type        = list(string)
+  default     = [
+    "argocd.thongit.space",
+    "grafana.thongit.space",
+    "api.thongit.space"
+  ]
+}

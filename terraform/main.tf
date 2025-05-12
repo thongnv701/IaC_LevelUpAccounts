@@ -7,6 +7,15 @@ module "network" {
   vpc_cidr          = "10.0.0.0/16"
   availability_zones = ["ap-southeast-1a", "ap-southeast-1b"]
   allowed_cidr      = var.allowed_cidr
+  certificate_arns  = {
+    for domain in var.managed_domains : domain => aws_acm_certificate.service_certs[domain].arn
+  }
+
+  depends_on = [
+    aws_acm_certificate.service_certs,
+    aws_acm_certificate_validation.cert_validation,
+    aws_route53_record.cert_validation
+  ]
 }
 
 module "compute" {
@@ -92,19 +101,6 @@ provider "kubernetes" {
   alias       = "with_config"
   config_path = "${abspath(path.root)}/modules/compute/kubeconfig"
 }
-
-# module "kubernetes" {
-#   source      = "./modules/kubernetes"
-#   rds_password = var.rds_password
-#   rds_username = var.rds_username
-#   rds_endpoint = var.rds_endpoint
-#   # depends_on = [
-#   #   null_resource.wait_for_cluster
-#   # ]
-#   providers = {
-#     kubernetes.with_config = kubernetes.with_config
-#   }
-# }
 
 // Add this temporarily to main.tf to test the Helm provider
 # modules/kubernetes/main.tf

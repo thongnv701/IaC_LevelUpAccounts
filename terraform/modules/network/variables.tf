@@ -21,3 +21,8 @@ variable "allowed_cidr" {
   type        = string
   default     = "0.0.0.0/0"  # Should be restricted in production
 }
+
+variable "certificate_arns" {
+  description = "Map of domain names to their SSL certificate ARNs"
+  type        = map(string)
+}
