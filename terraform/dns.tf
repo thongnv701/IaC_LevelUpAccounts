@@ -85,8 +85,13 @@ resource "aws_route53_record" "cert_validation" {
 resource "aws_acm_certificate_validation" "service_certs" {
   for_each = aws_acm_certificate.service_certs
 
-  certificate_arn         = each.value.arn
-  validation_record_fqdns = [for record in aws_route53_record.cert_validation : record.fqdn if record.name == each.value.domain_validation_options[0].resource_record_name]
+  certificate_arn = each.value.arn
+  validation_record_fqdns = flatten([
+    for dvo in each.value.domain_validation_options : [
+      for record in aws_route53_record.cert_validation : 
+      record.fqdn if record.name == dvo.resource_record_name
+    ]
+  ])
   
   timeouts {
     create = "45m"
