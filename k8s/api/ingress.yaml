@@ -5,15 +5,17 @@ metadata:
   namespace: level-up-accounts
   annotations:
     kubernetes.io/ingress.class: "nginx"
-    cert-manager.io/cluster-issuer: letsencrypt-prod
+    # Temporarily comment out cert-manager annotation
+    # cert-manager.io/cluster-issuer: letsencrypt-prod
     nginx.ingress.kubernetes.io/ssl-redirect: "false"
     nginx.ingress.kubernetes.io/use-regex: "true"
     nginx.ingress.kubernetes.io/rewrite-target: /$1
 spec:
-  tls:
-  - hosts:
-    - api.thongit.space
-    secretName: level-up-accounts-tls
+  # Temporarily comment out TLS section
+  # tls:
+  # - hosts:
+  #   - api.thongit.space
+  #   secretName: level-up-accounts-tls
   rules:
   - host: api.thongit.space
     http:

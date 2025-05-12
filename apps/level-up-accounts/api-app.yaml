@@ -17,7 +17,7 @@ spec:
       patches:
         - target:
             kind: Secret
-            name: github-auth
+            name: github-autha
           patch: |
             - op: replace
               path: /stringData/token
@@ -30,4 +30,11 @@ spec:
       prune: true
       selfHeal: true
     syncOptions:
-      - CreateNamespace=true 
+      - CreateNamespace=true
+  ignoreDifferences:
+    - group: ""
+      kind: Secret
+      name: github-autha
+      namespace: level-up-accounts
+      jsonPointers:
+        - /data/token

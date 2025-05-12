@@ -52,7 +52,7 @@ spec:
         volumeMounts:
         - name: config-volume
           mountPath: /config
-        - name: github-auth
+        - name: github-autha
           mountPath: /etc/github
           readOnly: true
       containers:
@@ -66,6 +66,9 @@ spec:
         volumeMounts:
         - name: config-volume
           mountPath: /app/config
+        - name: github-autha
+          mountPath: /etc/github
+          readOnly: true
         env:
         - name: ASPNETCORE_ENVIRONMENT
           value: "Production"
@@ -95,9 +98,9 @@ spec:
       volumes:
       - name: config-volume
         emptyDir: {}
-      - name: github-auth
+      - name: github-autha
         secret:
-          secretName: github-auth
+          secretName: github-autha
           items:
           - key: token
             path: token 

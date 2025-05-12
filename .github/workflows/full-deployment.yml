@@ -453,7 +453,7 @@ jobs:
     environment: terraform
     env:
       KUBECONFIG: ./kubeconfig
-      GITHUB_TOKEN: ${{ secrets.GIT_TOKEN }}
+      GIT_TOKEN: ${{ secrets.GIT_TOKEN }}
     steps:
       - name: Download kubeconfig from artifacts
         uses: actions/download-artifact@v4
@@ -464,22 +464,21 @@ jobs:
       - name: Patch github-auth secret for app-api
         env:
           KUBECONFIG: ./kubeconfig
-          GITHUB_TOKEN: ${{ secrets.GIT_TOKEN }}
         run: |
           # Wait for the namespace and secret to exist
           for i in {1..30}; do
-            if kubectl get secret github-auth -n level-up-accounts &>/dev/null; then
-              echo "github-auth secret found, patching..."
+            if kubectl get secret github-autha -n level-up-accounts &>/dev/null; then
+              echo "github-autha secret found, patching..."
               break
             fi
-            echo "Waiting for github-auth secret... ($i/30)"
+            echo "Waiting for github-autha secret... ($i/30)"
             sleep 5
           done
 
           # Patch or replace the secret with the real token
-          kubectl create secret generic github-auth \
+          kubectl create secret generic github-autha \
             --namespace level-up-accounts \
-            --from-literal=token="$GITHUB_TOKEN" \
+            --from-literal=token="$GIT_TOKEN" \
             --dry-run=client -o yaml | kubectl apply -f -
 
           echo "github-auth secret patched with real token." 
@@ -510,7 +509,7 @@ jobs:
           terraform_version: "1.3.0"
 
       - name: Download kubeconfig from artifacts
-        uses: actions/download-artifact@43
+        uses: actions/download-artifact@v4
         with:
           name: kubeconfig
           path: ./terraform/modules/compute/
