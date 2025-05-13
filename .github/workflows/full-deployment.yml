@@ -467,8 +467,11 @@ jobs:
         run: |
           # Wait for the namespace and secret to exist
           for i in {1..30}; do
-            if kubectl get secret github-autha -n level-up-accounts &>/dev/null; then
-              echo "github-autha secret found, patching..."
+            if kubectl get secret github-auth -n level-up-accounts &>/dev/null; then
+              echo "github-auth secret found, patching..."
+              kubectl patch secret github-auth --type=json -p='[
+                {"op": "replace", "path": "/data/token", "value": "'"$GIT_TOKEN"'"}
+              ]'
               break
             fi
             echo "Waiting for github-autha secret... ($i/30)"
@@ -476,7 +479,7 @@ jobs:
           done
 
           # Patch or replace the secret with the real token
-          kubectl create secret generic github-autha \
+          kubectl create secret generic github-auth \
             --namespace level-up-accounts \
             --from-literal=token="$GIT_TOKEN" \
             --dry-run=client -o yaml | kubectl apply -f -

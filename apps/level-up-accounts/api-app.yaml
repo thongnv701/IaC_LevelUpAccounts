@@ -17,7 +17,7 @@ spec:
       patches:
         - target:
             kind: Secret
-            name: github-autha
+            name: github-auth
           patch: |
             - op: replace
               path: /stringData/token
@@ -34,7 +34,7 @@ spec:
   ignoreDifferences:
     - group: ""
       kind: Secret
-      name: github-autha
+      name: github-auth
       namespace: level-up-accounts
       jsonPointers:
         - /data/token
