@@ -505,8 +505,8 @@ jobs:
             echo "✅ **Complete deployment successful!**" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
             echo "You can now access:" >> $GITHUB_STEP_SUMMARY
-            echo "- ArgoCD: https://argocd.thongit.space:30443" >> $GITHUB_STEP_SUMMARY
-            echo "- Grafana: https://grafana.thongit.space:30443" >> $GITHUB_STEP_SUMMARY
+            echo "- ArgoCD: https://argocd.thongit.space" >> $GITHUB_STEP_SUMMARY
+            echo "- Grafana: https://grafana.thongit.space" >> $GITHUB_STEP_SUMMARY
           else
             echo "⚠️ **Deployment had some issues!**" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
