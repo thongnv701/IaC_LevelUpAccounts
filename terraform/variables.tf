@@ -56,3 +56,9 @@ variable "managed_domains" {
     "api.thongit.space"
   ]
 }
+
+variable "worker_count" {
+  description = "Number of worker nodes to create"
+  type        = number
+  default     = 1
+}
