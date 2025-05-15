@@ -29,6 +29,7 @@ module "compute" {
   private_key_content = var.private_key_content
   http_target_group_arn = module.network.http_target_group_arn
   https_target_group_arn = module.network.https_target_group_arn
+  worker_count = var.worker_count
   master_user_data   = <<-EOF
     #!/bin/bash
     set -e
