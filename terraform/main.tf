@@ -140,7 +140,7 @@ resource "helm_release" "prometheus_operator" {
   name       = "prometheus-operator"
   repository = "https://prometheus-community.github.io/helm-charts"
   chart      = "kube-prometheus-stack"
-  version    = "55.5.0"
+  version    = "72.5.3"
   namespace  = "monitoring"
   create_namespace = true
 
@@ -175,7 +175,7 @@ resource "helm_release" "nginx_ingress" {
   name       = "nginx-ingress"
   repository = "https://kubernetes.github.io/ingress-nginx"
   chart      = "ingress-nginx"
-  version    = "4.10.1"
+  version    = "4.12.2"
   namespace  = "ingress-nginx"
   create_namespace = true
   timeout    = 600
