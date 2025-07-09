@@ -385,6 +385,32 @@ jobs:
           echo "Giving cert-manager some time to fully initialize..."
           sleep 30
 
+      - name: Wait for cert-manager to be fully ready
+        env:
+          KUBECONFIG: ./kubeconfig
+        run: |
+          echo "Waiting for cert-manager webhook to be ready..."
+          
+          # Wait for cert-manager deployment to be ready
+          kubectl wait --for=condition=available --timeout=300s deployment/cert-manager -n cert-manager || echo "cert-manager deployment wait timed out"
+          kubectl wait --for=condition=available --timeout=300s deployment/cert-manager-webhook -n cert-manager || echo "cert-manager-webhook deployment wait timed out"
+          kubectl wait --for=condition=available --timeout=300s deployment/cert-manager-cainjector -n cert-manager || echo "cert-manager-cainjector deployment wait timed out"
+          
+          # Wait for webhook service endpoints to be ready
+          echo "Waiting for cert-manager-webhook service endpoints..."
+          for i in {1..30}; do
+            if kubectl get endpoints cert-manager-webhook -n cert-manager -o jsonpath='{.subsets[0].addresses[0].ip}' 2>/dev/null | grep -q .; then
+              echo "cert-manager-webhook endpoints are ready"
+              break
+            fi
+            echo "Waiting for cert-manager-webhook endpoints... ($i/30)"
+            sleep 10
+          done
+          
+          # Additional wait to ensure webhook is responding
+          echo "Giving cert-manager webhook additional time to be fully ready..."
+          sleep 30
+
       - name: Patch ClusterIssuer with credentials
         env:
           KUBECONFIG: ./kubeconfig
@@ -393,13 +419,24 @@ jobs:
           echo "Waiting for ClusterIssuer to be created by ArgoCD..."
           for i in {1..30}; do
             if kubectl get clusterissuer letsencrypt-prod 2>/dev/null; then
-              echo "Patching ClusterIssuer with credentials..."
-              kubectl patch clusterissuer letsencrypt-prod --type=json -p='[
-                {"op": "replace", "path": "/spec/acme/email", "value": "'"$ACME_EMAIL"'"},
-                {"op": "replace", "path": "/spec/acme/solvers/0/dns01/route53/hostedZoneID", "value": "'"$AWS_HOSTED_ZONE_ID"'"},
-                {"op": "replace", "path": "/spec/acme/solvers/0/dns01/route53/accessKeyID", "value": "'"$AWS_ACCESS_KEY_ID"'"}
-              ]'
-              echo "ClusterIssuer patched successfully!"
+              echo "ClusterIssuer found, attempting to patch with credentials..."
+              
+              # Try patching with retries in case webhook is still stabilizing
+              for retry in {1..5}; do
+                if kubectl patch clusterissuer letsencrypt-prod --type=json -p='[
+                  {"op": "replace", "path": "/spec/acme/email", "value": "'"$ACME_EMAIL"'"},
+                  {"op": "replace", "path": "/spec/acme/solvers/0/dns01/route53/hostedZoneID", "value": "'"$AWS_HOSTED_ZONE_ID"'"},
+                  {"op": "replace", "path": "/spec/acme/solvers/0/dns01/route53/accessKeyID", "value": "'"$AWS_ACCESS_KEY_ID"'"}
+                ]' 2>/dev/null; then
+                  echo "ClusterIssuer patched successfully!"
+                  break 2
+                else
+                  echo "Patch attempt $retry failed, retrying in 15 seconds..."
+                  sleep 15
+                fi
+              done
+              
+              echo "Failed to patch ClusterIssuer after 5 attempts"
               break
             fi
             echo "Waiting for ClusterIssuer... ($i/30)"
