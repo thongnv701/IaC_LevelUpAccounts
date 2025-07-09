@@ -257,13 +257,23 @@ jobs:
           # Upload to S3
           aws s3 cp argocd-admin-password.txt s3://my-terraform-backup-0701/argocd-admin-password.txt
           
+          # Make the password file publicly readable (for easy access via direct URL)
+          # Note: This makes the password temporarily accessible via direct URL
+          aws s3api put-object-acl --bucket my-terraform-backup-0701 --key argocd-admin-password.txt --acl public-read || echo "Warning: Could not make file public-readable. Use AWS CLI instead."
+          
+          # Generate a pre-signed URL for secure temporary access (24 hours)
+          PRESIGNED_URL=$(aws s3 presign s3://my-terraform-backup-0701/argocd-admin-password.txt --expires-in 86400)
+          echo "Pre-signed URL (24h): $PRESIGNED_URL"
+          
           # Clean up local file
           rm argocd-admin-password.txt
           
           echo "-----------------------------------------------"
           echo "ArgoCD initial admin password has been stored in S3"
           echo "You can retrieve it using:"
-          echo "aws s3 cp s3://my-terraform-backup-0701/argocd-admin-password.txt -"
+          echo "1. Direct URL (if public): https://my-terraform-backup-0701.s3.ap-southeast-1.amazonaws.com/argocd-admin-password.txt"
+          echo "2. AWS CLI: aws s3 cp s3://my-terraform-backup-0701/argocd-admin-password.txt -"
+          echo "3. Pre-signed URL (24h): $PRESIGNED_URL"
           echo "-----------------------------------------------"
 
       - name: Setup GitHub Token for ArgoCD
@@ -288,38 +298,6 @@ jobs:
           kubectl --kubeconfig=./modules/compute/kubeconfig wait --for=condition=available --timeout=300s deployment/argocd-server -n argocd
           
           echo "GitHub token setup completed"
-
-      - name: Notify ArgoCD Password Available
-        if: success()
-        run: |
-          curl -X POST -H 'Content-type: application/json' \
-            --data '{
-              "text": "🔐 *ArgoCD Installation Complete!*",
-              "blocks": [
-                {
-                  "type": "section",
-                  "text": {
-                    "type": "mrkdwn",
-                    "text": "✅ *ArgoCD has been successfully installed and configured!*"
-                  }
-                },
-                {
-                  "type": "section",
-                  "text": {
-                    "type": "mrkdwn",
-                    "text": "🔑 *Admin Password Location:*\n`aws s3 cp s3://my-terraform-backup-0701/argocd-admin-password.txt -`"
-                  }
-                },
-                {
-                  "type": "section",
-                  "text": {
-                    "type": "mrkdwn",
-                    "text": "🌐 *ArgoCD URL:* https://argocd.thongit.space\n👤 *Username:* `admin`"
-                  }
-                }
-              ]
-            }' \
-            ${{ secrets.SLACK_WEBHOOK_URL }}
 
       - name: Notify ArgoCD Installation Failed
         if: failure()
@@ -735,14 +713,14 @@ jobs:
                   "type": "section",
                   "text": {
                     "type": "mrkdwn",
-                    "text": "🔑 *ArgoCD Admin Access:*\n• *Username:* `admin`\n• *Password:* `aws s3 cp s3://my-terraform-backup-0701/argocd-admin-password.txt -`"
+                    "text": "🔑 *ArgoCD Admin Access:*\n• *Username:* `admin`\n• *Password URL:* https://my-terraform-backup-0701.s3.ap-southeast-1.amazonaws.com/argocd-admin-password.txt\n• *AWS CLI:* `aws s3 cp s3://my-terraform-backup-0701/argocd-admin-password.txt -`\n• *Secure Access:* Check logs for pre-signed URL (24h)"
                   }
                 },
                 {
                   "type": "section",
                   "text": {
                     "type": "mrkdwn",
-                    "text": "📋 *Quick Commands:*\n```# Get ArgoCD password\naws s3 cp s3://my-terraform-backup-0701/argocd-admin-password.txt -\n\n# Get kubeconfig\naws s3 cp s3://my-terraform-backup-0701/kubeconfig ./kubeconfig```"
+                    "text": "📋 *Quick Access:*\n```# ArgoCD Password (Direct URL - if public)\ncurl https://my-terraform-backup-0701.s3.ap-southeast-1.amazonaws.com/argocd-admin-password.txt\n\n# ArgoCD Password (AWS CLI)\naws s3 cp s3://my-terraform-backup-0701/argocd-admin-password.txt -\n\n# ArgoCD Password (Pre-signed URL - most secure)\n# Check deployment logs for the temporary secure link\n\n# Get kubeconfig\naws s3 cp s3://my-terraform-backup-0701/kubeconfig ./kubeconfig```"
                   }
                 }
               ]
