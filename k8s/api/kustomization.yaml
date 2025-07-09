@@ -5,7 +5,7 @@ resources:
   - deployment.yaml
   - service.yaml
   - ingress.yaml
-  - github-secret.yaml
+  # github-secret.yaml removed - External Secrets Operator creates this secret
 
 images:
   - name: level-up-accounts-api

@@ -17,6 +17,10 @@ jobs:
       AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
       TF_VAR_route53_zone_id: ${{ secrets.ROUTE53_ZONE_ID }}
+      TF_VAR_github_token: ${{ secrets.GIT_TOKEN }}
+      TF_VAR_master_instance_type: ${{ secrets.MASTER_INSTANCE_TYPE }}
+      TF_VAR_worker_instance_type: ${{ secrets.WORKER_INSTANCE_TYPE }}
+      TF_VAR_worker_count: ${{ secrets.WORKER_COUNT }}
       AWS_DEFAULT_REGION: "ap-southeast-1"
 
     defaults:
