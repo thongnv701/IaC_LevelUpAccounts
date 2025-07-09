@@ -21,7 +21,64 @@ on:
         default: true
 
 jobs:
+  deployment-start-notification:
+    runs-on: ubuntu-latest
+    environment: terraform
+    steps:
+      - name: Notify Deployment Started
+        run: |
+          curl -X POST -H 'Content-type: application/json' \
+            --data '{
+              "text": "🚀 *Infrastructure Deployment Started!*",
+              "blocks": [
+                {
+                  "type": "header",
+                  "text": {
+                    "type": "plain_text",
+                    "text": "🏗️ LevelUp Accounts Deployment"
+                  }
+                },
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "⏳ *Deployment has started!*\n\nThe following components will be deployed:"
+                  }
+                },
+                {
+                  "type": "section",
+                  "fields": [
+                    {
+                      "type": "mrkdwn",
+                      "text": "*${{ github.event.inputs.deploy_terraform == 'true' && '✅' || '⏭️' }} Terraform Infrastructure*"
+                    },
+                    {
+                      "type": "mrkdwn",
+                      "text": "*${{ github.event.inputs.deploy_nginx_ingress == 'true' && '✅' || '⏭️' }} Nginx Ingress*"
+                    },
+                    {
+                      "type": "mrkdwn",
+                      "text": "*${{ github.event.inputs.deploy_cert_manager == 'true' && '✅' || '⏭️' }} Cert Manager*"
+                    },
+                    {
+                      "type": "mrkdwn",
+                      "text": "*${{ github.event.inputs.deploy_app_of_apps == 'true' && '✅' || '⏭️' }} App of Apps*"
+                    }
+                  ]
+                },
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "📈 *Progress:* <${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View GitHub Actions>\n⏱️ *Estimated Time:* 10-15 minutes"
+                  }
+                }
+              ]
+            }' \
+            ${{ secrets.SLACK_WEBHOOK_URL }}
+
   terraform-infra:
+    needs: deployment-start-notification
     if: ${{ github.event.inputs.deploy_terraform == 'true' }}
     runs-on: ubuntu-latest
     environment: terraform
@@ -231,6 +288,63 @@ jobs:
           kubectl --kubeconfig=./modules/compute/kubeconfig wait --for=condition=available --timeout=300s deployment/argocd-server -n argocd
           
           echo "GitHub token setup completed"
+
+      - name: Notify ArgoCD Password Available
+        if: success()
+        run: |
+          curl -X POST -H 'Content-type: application/json' \
+            --data '{
+              "text": "🔐 *ArgoCD Installation Complete!*",
+              "blocks": [
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "✅ *ArgoCD has been successfully installed and configured!*"
+                  }
+                },
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "🔑 *Admin Password Location:*\n`aws s3 cp s3://my-terraform-backup-0701/argocd-admin-password.txt -`"
+                  }
+                },
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "🌐 *ArgoCD URL:* https://argocd.thongit.space\n👤 *Username:* `admin`"
+                  }
+                }
+              ]
+            }' \
+            ${{ secrets.SLACK_WEBHOOK_URL }}
+
+      - name: Notify ArgoCD Installation Failed
+        if: failure()
+        run: |
+          curl -X POST -H 'Content-type: application/json' \
+            --data '{
+              "text": "⚠️ *ArgoCD Installation Failed!*",
+              "blocks": [
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "❌ *ArgoCD installation encountered an error.*"
+                  }
+                },
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "🔍 *Action Required:*\n• Check the <${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|GitHub Actions logs>\n• ArgoCD admin password may not be available\n• Manual intervention may be required"
+                  }
+                }
+              ]
+            }' \
+            ${{ secrets.SLACK_WEBHOOK_URL }}
 
   aws-secret-setup:
     needs: argocd-install
@@ -448,8 +562,6 @@ jobs:
             echo "Warning: ClusterIssuer 'letsencrypt-prod' was not found after waiting. It may be created later by ArgoCD."
           fi
 
-
-
   dns-management:
     needs: [terraform-infra]
     if: ${{ always() && (needs.terraform-infra.result == 'success' || needs.terraform-infra.result == 'skipped') }}
@@ -498,8 +610,147 @@ jobs:
           echo "DNS entries updated through Terraform:"
           terraform output dns_records | sed 's/{//g' | sed 's/}//g' | sed 's/"//g' | tr -d '\n' | sed 's/,/\n/g'
 
-  deployment-summary:
+  slack-notification:
     needs: [terraform-infra, nginx-ingress, argocd-install, aws-secret-setup, app-of-apps-deploy, dns-management]
+    if: always()
+    runs-on: ubuntu-latest
+    environment: terraform
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      AWS_DEFAULT_REGION: "ap-southeast-1"
+    steps:
+      - name: Send Deployment Completion Notification
+        run: |
+          # Determine overall status
+          if [[ "${{ needs.terraform-infra.result }}" == "success" && "${{ needs.nginx-ingress.result }}" == "success" && "${{ needs.argocd-install.result }}" == "success" && "${{ needs.aws-secret-setup.result }}" == "success" && "${{ needs.app-of-apps-deploy.result }}" == "success" && "${{ needs.dns-management.result }}" == "success" ]]; then
+            STATUS="✅ SUCCESS"
+            COLOR="good"
+            MESSAGE="🎉 *Complete Infrastructure Deployment Successful!*"
+            DETAILS="All components have been deployed successfully. Your infrastructure is ready to use!"
+          else
+            STATUS="❌ FAILED"
+            COLOR="danger"
+            MESSAGE="⚠️ *Deployment had some issues!*"
+            DETAILS="Some components failed to deploy. Please check the GitHub Actions logs for details."
+          fi
+          
+          # Create the JSON payload
+          cat > slack_payload.json << EOF
+          {
+            "text": "$MESSAGE",
+            "attachments": [
+              {
+                "color": "$COLOR",
+                "blocks": [
+                  {
+                    "type": "header",
+                    "text": {
+                      "type": "plain_text",
+                      "text": "🚀 LevelUp Accounts Infrastructure Deployment"
+                    }
+                  },
+                  {
+                    "type": "section",
+                    "text": {
+                      "type": "mrkdwn",
+                      "text": "$DETAILS"
+                    }
+                  },
+                  {
+                    "type": "section",
+                    "fields": [
+                      {
+                        "type": "mrkdwn",
+                        "text": "*🏗️ Terraform Infrastructure:*\n\`${{ needs.terraform-infra.result }}\`"
+                      },
+                      {
+                        "type": "mrkdwn",
+                        "text": "*🌐 Nginx Ingress:*\n\`${{ needs.nginx-ingress.result }}\`"
+                      },
+                      {
+                        "type": "mrkdwn",
+                        "text": "*🔄 ArgoCD Installation:*\n\`${{ needs.argocd-install.result }}\`"
+                      },
+                      {
+                        "type": "mrkdwn",
+                        "text": "*🔐 AWS Secret Setup:*\n\`${{ needs.aws-secret-setup.result }}\`"
+                      },
+                      {
+                        "type": "mrkdwn",
+                        "text": "*📦 App of Apps:*\n\`${{ needs.app-of-apps-deploy.result }}\`"
+                      },
+                      {
+                        "type": "mrkdwn",
+                        "text": "*🌍 DNS Management:*\n\`${{ needs.dns-management.result }}\`"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+          EOF
+          
+          # Send the notification
+          curl -X POST -H 'Content-type: application/json' \
+            --data @slack_payload.json \
+            ${{ secrets.SLACK_WEBHOOK_URL }}
+
+      - name: Send Service URLs and Credentials Info
+        if: ${{ needs.terraform-infra.result == 'success' && needs.argocd-install.result == 'success' }}
+        run: |
+          curl -X POST -H 'Content-type: application/json' \
+            --data '{
+              "text": "🔗 *Service URLs & Access Information*",
+              "blocks": [
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "🌐 *Available Services:*"
+                  }
+                },
+                {
+                  "type": "section",
+                  "fields": [
+                    {
+                      "type": "mrkdwn",
+                      "text": "*🔄 ArgoCD:*\n<https://argocd.thongit.space|argocd.thongit.space>"
+                    },
+                    {
+                      "type": "mrkdwn",
+                      "text": "*📊 Grafana:*\n<https://grafana.thongit.space|grafana.thongit.space>"
+                    },
+                    {
+                      "type": "mrkdwn",
+                      "text": "*🚀 API:*\n<https://api.thongit.space|api.thongit.space>"
+                    }
+                  ]
+                },
+                {
+                  "type": "divider"
+                },
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "🔑 *ArgoCD Admin Access:*\n• *Username:* `admin`\n• *Password:* `aws s3 cp s3://my-terraform-backup-0701/argocd-admin-password.txt -`"
+                  }
+                },
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "📋 *Quick Commands:*\n```# Get ArgoCD password\naws s3 cp s3://my-terraform-backup-0701/argocd-admin-password.txt -\n\n# Get kubeconfig\naws s3 cp s3://my-terraform-backup-0701/kubeconfig ./kubeconfig```"
+                  }
+                }
+              ]
+            }' \
+            ${{ secrets.SLACK_WEBHOOK_URL }}
+
+  deployment-summary:
+    needs: [terraform-infra, nginx-ingress, argocd-install, aws-secret-setup, app-of-apps-deploy, dns-management, slack-notification]
     if: always()
     runs-on: ubuntu-latest
     steps:
