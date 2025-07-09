@@ -481,22 +481,93 @@ jobs:
           echo "Giving External Secrets Operator time to initialize..."
           sleep 30
           
-          # Verify GitHub token exists in AWS Secrets Manager
+          # Verify and restore GitHub token if needed
           echo "Verifying GitHub token in AWS Secrets Manager..."
-          if aws secretsmanager describe-secret --secret-id "level-up-accounts/github-token" >/dev/null 2>&1; then
+          GITHUB_SECRET_STATUS=$(aws secretsmanager describe-secret --secret-id "level-up-accounts/github-token" --query 'DeletedDate' --output text 2>/dev/null || echo "NOT_FOUND")
+          
+          if [ "$GITHUB_SECRET_STATUS" = "NOT_FOUND" ]; then
+            echo "❌ GitHub token NOT found in AWS Secrets Manager"
+            echo "This may cause External Secrets to fail"
+          elif [ "$GITHUB_SECRET_STATUS" != "None" ]; then
+            echo "⚠️ GitHub token is marked for deletion, attempting to restore..."
+            if aws secretsmanager restore-secret --secret-id "level-up-accounts/github-token" 2>/dev/null; then
+              echo "✅ Successfully restored GitHub token from deletion"
+              sleep 5
+            else
+              echo "❌ Could not restore GitHub token"
+            fi
+          fi
+          
+          # Verify token after potential restoration
+          if aws secretsmanager describe-secret --secret-id "level-up-accounts/github-token" --query 'Name' --output text >/dev/null 2>&1; then
             echo "✅ GitHub token found in AWS Secrets Manager"
-            GITHUB_TOKEN_VALUE=$(aws secretsmanager get-secret-value --secret-id "level-up-accounts/github-token" --query SecretString --output text | jq -r '.token' 2>/dev/null || echo "parsing failed")
-            if [ ${#GITHUB_TOKEN_VALUE} -gt 10 ]; then
+            GITHUB_TOKEN_VALUE=$(aws secretsmanager get-secret-value --secret-id "level-up-accounts/github-token" --query SecretString --output text 2>/dev/null | jq -r '.token' 2>/dev/null || echo "parsing failed")
+            if [ "$GITHUB_TOKEN_VALUE" != "parsing failed" ] && [ ${#GITHUB_TOKEN_VALUE} -gt 10 ]; then
               echo "✅ GitHub token appears valid (length: ${#GITHUB_TOKEN_VALUE})"
             else
               echo "⚠️ GitHub token may be invalid or empty"
             fi
           else
-            echo "❌ GitHub token NOT found in AWS Secrets Manager"
-            echo "This may cause External Secrets to fail"
+            echo "❌ GitHub token still not accessible"
           fi
           
           echo "AWS Credentials and configuration secrets created"
+          
+          # Manual SecretStore fix - recreate with proper configuration
+          echo "Recreating SecretStore with proper AWS credentials reference..."
+          kubectl delete secretstore aws-secrets-manager -n level-up-accounts --ignore-not-found=true
+          
+          cat <<EOF | kubectl apply -f -
+          apiVersion: external-secrets.io/v1beta1
+          kind: SecretStore
+          metadata:
+            name: aws-secrets-manager
+            namespace: level-up-accounts
+          spec:
+            provider:
+              aws:
+                service: SecretsManager
+                region: ap-southeast-1
+                auth:
+                  secretRef:
+                    accessKeyID:
+                      name: aws-credentials
+                      key: access-key-id
+                      namespace: level-up-accounts
+                    secretAccessKey:
+                      name: aws-credentials
+                      key: secret-access-key
+                      namespace: level-up-accounts
+          EOF
+          
+          echo "Waiting for SecretStore to be ready..."
+          for i in {1..60}; do
+            STATUS=$(kubectl get secretstore aws-secrets-manager -n level-up-accounts -o jsonpath='{.status.conditions[0].status}' 2>/dev/null || echo "Unknown")
+            echo "SecretStore status: $STATUS ($i/60)"
+            if [ "$STATUS" = "True" ]; then
+              echo "✅ SecretStore is ready!"
+              break
+            fi
+            sleep 10
+          done
+          
+          if [ "$STATUS" = "True" ]; then
+            echo "Triggering ExternalSecret refresh..."
+            # Force ExternalSecret to refresh by adding an annotation
+            kubectl annotate externalsecret github-auth-external -n level-up-accounts force-sync=$(date +%s) --overwrite
+            
+            echo "Waiting for github-auth secret to be created..."
+            for i in {1..30}; do
+              if kubectl get secret github-auth -n level-up-accounts >/dev/null 2>&1; then
+                echo "✅ github-auth secret created successfully!"
+                break
+              fi
+              echo "Waiting for github-auth secret... ($i/30)"
+              sleep 10
+            done
+          else
+            echo "⚠️ SecretStore is not ready, github-auth secret may not be created"
+          fi
           
           # Important note about External Secrets credentials
           if [ "$ESO_ACCESS_KEY_ID" = "$AWS_ACCESS_KEY_ID" ]; then
