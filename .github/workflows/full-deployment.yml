@@ -471,15 +471,7 @@ jobs:
           echo "Verifying aws-credentials secret..."
           kubectl get secret aws-credentials -n level-up-accounts -o yaml | grep -E "access-key-id|secret-access-key" || echo "Failed to verify secret keys"
           
-          # Wait for External Secrets Operator to be ready before proceeding
-          echo "Waiting for External Secrets Operator to be ready..."
-          kubectl wait --for=condition=available --timeout=300s deployment/external-secrets -n external-secrets-system || echo "ESO deployment wait timeout"
-          kubectl wait --for=condition=available --timeout=300s deployment/external-secrets-webhook -n external-secrets-system || echo "ESO webhook wait timeout"
-          kubectl wait --for=condition=available --timeout=300s deployment/external-secrets-cert-controller -n external-secrets-system || echo "ESO cert-controller wait timeout"
-          
-          # Give ESO additional time to initialize
-          echo "Giving External Secrets Operator time to initialize..."
-          sleep 30
+          echo "External Secrets Operator will be deployed later through ArgoCD."
           
           # Verify and restore GitHub token if needed
           echo "Verifying GitHub token in AWS Secrets Manager..."
@@ -513,59 +505,7 @@ jobs:
           
           echo "AWS Credentials and configuration secrets created"
           
-          # Manual SecretStore fix - recreate with proper configuration
-          echo "Recreating SecretStore with proper AWS credentials reference..."
-          kubectl delete secretstore aws-secrets-manager -n level-up-accounts --ignore-not-found=true
-          
-          cat <<EOF | kubectl apply -f -
-          apiVersion: external-secrets.io/v1beta1
-          kind: SecretStore
-          metadata:
-            name: aws-secrets-manager
-            namespace: level-up-accounts
-          spec:
-            provider:
-              aws:
-                service: SecretsManager
-                region: ap-southeast-1
-                auth:
-                  secretRef:
-                    accessKeyIDSecretRef:
-                      name: aws-credentials
-                      key: access-key-id
-                    secretAccessKeySecretRef:
-                      name: aws-credentials
-                      key: secret-access-key
-          EOF
-          
-          echo "Waiting for SecretStore to be ready..."
-          for i in {1..60}; do
-            STATUS=$(kubectl get secretstore aws-secrets-manager -n level-up-accounts -o jsonpath='{.status.conditions[0].status}' 2>/dev/null || echo "Unknown")
-            echo "SecretStore status: $STATUS ($i/60)"
-            if [ "$STATUS" = "True" ]; then
-              echo "✅ SecretStore is ready!"
-              break
-            fi
-            sleep 10
-          done
-          
-          if [ "$STATUS" = "True" ]; then
-            echo "Triggering ExternalSecret refresh..."
-            # Force ExternalSecret to refresh by adding an annotation
-            kubectl annotate externalsecret github-auth-external -n level-up-accounts force-sync=$(date +%s) --overwrite
-            
-            echo "Waiting for github-auth secret to be created..."
-            for i in {1..30}; do
-              if kubectl get secret github-auth -n level-up-accounts >/dev/null 2>&1; then
-                echo "✅ github-auth secret created successfully!"
-                break
-              fi
-              echo "Waiting for github-auth secret... ($i/30)"
-              sleep 10
-            done
-          else
-            echo "⚠️ SecretStore is not ready, github-auth secret may not be created"
-          fi
+          echo "External Secrets configuration will be handled after External Secrets Operator is deployed."
           
           # Important note about External Secrets credentials
           if [ "$ESO_ACCESS_KEY_ID" = "$AWS_ACCESS_KEY_ID" ]; then
@@ -791,6 +731,110 @@ jobs:
           
           echo "=== END DEBUG ==="
 
+  external-secrets-setup:
+    needs: app-of-apps-deploy
+    if: ${{ always() && (needs.app-of-apps-deploy.result == 'success' || needs.app-of-apps-deploy.result == 'skipped') }}
+    runs-on: ubuntu-latest
+    environment: terraform
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      AWS_DEFAULT_REGION: "ap-southeast-1"
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Download kubeconfig from artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: kubeconfig
+          path: ./
+
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: 'latest'
+
+      - name: Wait for External Secrets Operator and Configure SecretStore
+        env:
+          KUBECONFIG: ./kubeconfig
+        run: |
+          echo "Waiting for External Secrets Operator to be ready..."
+          
+          # Wait for External Secrets Operator deployments to be available
+          kubectl wait --for=condition=available --timeout=600s deployment/external-secrets -n external-secrets-system || echo "ESO deployment wait timeout"
+          kubectl wait --for=condition=available --timeout=600s deployment/external-secrets-webhook -n external-secrets-system || echo "ESO webhook wait timeout"
+          kubectl wait --for=condition=available --timeout=600s deployment/external-secrets-cert-controller -n external-secrets-system || echo "ESO cert-controller wait timeout"
+          
+          # Give ESO additional time to initialize CRDs and webhooks
+          echo "Giving External Secrets Operator time to initialize..."
+          sleep 60
+          
+          echo "Creating/updating SecretStore with proper AWS credentials reference..."
+          kubectl delete secretstore aws-secrets-manager -n level-up-accounts --ignore-not-found=true
+          
+          cat <<EOF | kubectl apply -f -
+          apiVersion: external-secrets.io/v1beta1
+          kind: SecretStore
+          metadata:
+            name: aws-secrets-manager
+            namespace: level-up-accounts
+          spec:
+            provider:
+              aws:
+                service: SecretsManager
+                region: ap-southeast-1
+                auth:
+                  secretRef:
+                    accessKeyIDSecretRef:
+                      name: aws-credentials
+                      key: access-key-id
+                    secretAccessKeySecretRef:
+                      name: aws-credentials
+                      key: secret-access-key
+          EOF
+          
+          echo "Waiting for SecretStore to be ready..."
+          for i in {1..60}; do
+            STATUS=$(kubectl get secretstore aws-secrets-manager -n level-up-accounts -o jsonpath='{.status.conditions[0].status}' 2>/dev/null || echo "Unknown")
+            echo "SecretStore status: $STATUS ($i/60)"
+            if [ "$STATUS" = "True" ]; then
+              echo "✅ SecretStore is ready!"
+              break
+            fi
+            sleep 10
+          done
+          
+          if [ "$STATUS" = "True" ]; then
+            echo "Triggering ExternalSecret refresh..."
+            # Force ExternalSecret to refresh by adding an annotation
+            kubectl annotate externalsecret github-auth-external -n level-up-accounts force-sync=$(date +%s) --overwrite || echo "ExternalSecret not found yet"
+            
+            echo "Waiting for github-auth secret to be created..."
+            for i in {1..30}; do
+              if kubectl get secret github-auth -n level-up-accounts >/dev/null 2>&1; then
+                echo "✅ github-auth secret created successfully!"
+                TOKEN_LENGTH=$(kubectl get secret github-auth -n level-up-accounts -o jsonpath='{.data.token}' | base64 -d | wc -c)
+                echo "GitHub token length: $TOKEN_LENGTH characters"
+                break
+              fi
+              echo "Waiting for github-auth secret... ($i/30)"
+              sleep 10
+            done
+            
+            # Verify the secret content
+            if kubectl get secret github-auth -n level-up-accounts >/dev/null 2>&1; then
+              echo "✅ Final verification: github-auth secret exists and is ready"
+            else
+              echo "⚠️ github-auth secret was not created successfully"
+            fi
+          else
+            echo "⚠️ SecretStore is not ready after 10 minutes, github-auth secret may not be created"
+            echo "Checking SecretStore details:"
+            kubectl describe secretstore aws-secrets-manager -n level-up-accounts || echo "Could not describe SecretStore"
+          fi
+
   dns-management:
     needs: [terraform-infra]
     if: ${{ always() && (needs.terraform-infra.result == 'success' || needs.terraform-infra.result == 'skipped') }}
@@ -840,7 +884,7 @@ jobs:
           terraform output dns_records | sed 's/{//g' | sed 's/}//g' | sed 's/"//g' | tr -d '\n' | sed 's/,/\n/g'
 
   slack-notification:
-    needs: [terraform-infra, nginx-ingress, argocd-install, aws-secret-setup, app-of-apps-deploy, dns-management]
+    needs: [terraform-infra, nginx-ingress, argocd-install, aws-secret-setup, app-of-apps-deploy, external-secrets-setup, dns-management]
     if: always()
     runs-on: ubuntu-latest
     environment: terraform
@@ -852,7 +896,7 @@ jobs:
       - name: Send Deployment Completion Notification
         run: |
           # Determine overall status
-          if [[ "${{ needs.terraform-infra.result }}" == "success" && "${{ needs.nginx-ingress.result }}" == "success" && "${{ needs.argocd-install.result }}" == "success" && "${{ needs.aws-secret-setup.result }}" == "success" && "${{ needs.app-of-apps-deploy.result }}" == "success" && "${{ needs.dns-management.result }}" == "success" ]]; then
+          if [[ "${{ needs.terraform-infra.result }}" == "success" && "${{ needs.nginx-ingress.result }}" == "success" && "${{ needs.argocd-install.result }}" == "success" && "${{ needs.aws-secret-setup.result }}" == "success" && "${{ needs.app-of-apps-deploy.result }}" == "success" && "${{ needs.external-secrets-setup.result }}" == "success" && "${{ needs.dns-management.result }}" == "success" ]]; then
             STATUS="✅ SUCCESS"
             COLOR="good"
             MESSAGE="🎉 *Complete Infrastructure Deployment Successful!*"
@@ -905,14 +949,18 @@ jobs:
                         "type": "mrkdwn",
                         "text": "*🔐 AWS Secret Setup:*\n\`${{ needs.aws-secret-setup.result }}\`"
                       },
-                      {
-                        "type": "mrkdwn",
-                        "text": "*📦 App of Apps:*\n\`${{ needs.app-of-apps-deploy.result }}\`"
-                      },
-                      {
-                        "type": "mrkdwn",
-                        "text": "*🌍 DNS Management:*\n\`${{ needs.dns-management.result }}\`"
-                      }
+                                          {
+                      "type": "mrkdwn",
+                      "text": "*📦 App of Apps:*\n\`${{ needs.app-of-apps-deploy.result }}\`"
+                    },
+                    {
+                      "type": "mrkdwn",
+                      "text": "*🔐 External Secrets:*\n\`${{ needs.external-secrets-setup.result }}\`"
+                    },
+                    {
+                      "type": "mrkdwn",
+                      "text": "*🌍 DNS Management:*\n\`${{ needs.dns-management.result }}\`"
+                    }
                     ]
                   }
                 ]
@@ -979,7 +1027,7 @@ jobs:
             ${{ secrets.SLACK_WEBHOOK_URL }}
 
   deployment-summary:
-    needs: [terraform-infra, nginx-ingress, argocd-install, aws-secret-setup, app-of-apps-deploy, dns-management, slack-notification]
+    needs: [terraform-infra, nginx-ingress, argocd-install, aws-secret-setup, app-of-apps-deploy, external-secrets-setup, dns-management, slack-notification]
     if: always()
     runs-on: ubuntu-latest
     steps:
@@ -994,10 +1042,11 @@ jobs:
           echo "| ArgoCD Installation | ${{ needs.argocd-install.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| AWS Secret Setup | ${{ needs.aws-secret-setup.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| App of Apps | ${{ needs.app-of-apps-deploy.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| External Secrets Setup | ${{ needs.external-secrets-setup.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| DNS Management | ${{ needs.dns-management.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           
-          if [[ "${{ needs.terraform-infra.result }}" == "success" && "${{ needs.nginx-ingress.result }}" == "success" && "${{ needs.argocd-install.result }}" == "success" && "${{ needs.aws-secret-setup.result }}" == "success" && "${{ needs.app-of-apps-deploy.result }}" == "success" && "${{ needs.dns-management.result }}" == "success" ]]; then
+          if [[ "${{ needs.terraform-infra.result }}" == "success" && "${{ needs.nginx-ingress.result }}" == "success" && "${{ needs.argocd-install.result }}" == "success" && "${{ needs.aws-secret-setup.result }}" == "success" && "${{ needs.app-of-apps-deploy.result }}" == "success" && "${{ needs.external-secrets-setup.result }}" == "success" && "${{ needs.dns-management.result }}" == "success" ]]; then
             echo "✅ **Complete deployment successful!**" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
             echo "You can now access:" >> $GITHUB_STEP_SUMMARY
