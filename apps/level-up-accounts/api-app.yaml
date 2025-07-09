@@ -11,9 +11,9 @@ spec:
     path: k8s/api
     kustomize:
       images:
-        - thongnv0701/levelupaccount:latest
+        - docker.io/thongnv0701/levelupaccounts=thongnv0701/levelupaccounts:latest
       commonAnnotations:
-        argocd.argoproj.io/sync-wave: "2" # Deploy after External Secrets Operator and config
+        argocd.argoproj.io/sync-wave: "3" # Deploy after External Secrets and Nginx Ingress
       # No patches needed - External Secrets Operator creates github-auth secret automatically
   destination:
     server: https://kubernetes.default.svc

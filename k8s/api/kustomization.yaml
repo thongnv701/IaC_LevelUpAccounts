@@ -8,6 +8,6 @@ resources:
   # github-secret.yaml removed - External Secrets Operator creates this secret
 
 images:
-  - name: level-up-accounts-api
-    newName: thongnv0701/levelupaccount
+  - name: docker.io/thongnv0701/levelupaccounts
+    newName: thongnv0701/levelupaccounts
     newTag: latest 

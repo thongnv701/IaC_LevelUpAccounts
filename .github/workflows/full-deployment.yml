@@ -659,77 +659,7 @@ jobs:
             echo "Warning: ClusterIssuer 'letsencrypt-prod' was not found after waiting. It may be created later by ArgoCD."
           fi
 
-      - name: Debug External Secrets Status
-        env:
-          KUBECONFIG: ./kubeconfig
-        run: |
-          echo "=== DEBUGGING EXTERNAL SECRETS ==="
-          
-          echo "1. External Secrets Operator pods:"
-          kubectl get pods -n external-secrets-system || echo "No ESO pods found"
-          
-          echo "2. External Secrets Operator logs (last 20 lines):"
-          kubectl logs -n external-secrets-system deployment/external-secrets --tail=20 || echo "Could not get ESO logs"
-          
-          echo "3. SecretStore status:"
-          kubectl get secretstore -n level-up-accounts || echo "No SecretStore found"
-          kubectl describe secretstore aws-secrets-manager -n level-up-accounts || echo "Could not describe SecretStore"
-          
-          echo "4. ExternalSecret status:"
-          kubectl get externalsecret -n level-up-accounts || echo "No ExternalSecret found"
-          kubectl describe externalsecret github-auth-external -n level-up-accounts || echo "Could not describe ExternalSecret"
-          
-          echo "5. Generated github-auth secret:"
-          kubectl get secret github-auth -n level-up-accounts || echo "github-auth secret not found"
-          
-          echo "6. AWS credentials secret:"
-          kubectl get secret aws-credentials -n level-up-accounts || echo "aws-credentials secret not found"
-          
-          echo "7. Testing AWS Secrets Manager access manually:"
-          AWS_ACCESS_KEY_ID=$(kubectl get secret aws-credentials -n level-up-accounts -o jsonpath='{.data.access-key-id}' | base64 -d)
-          AWS_SECRET_ACCESS_KEY=$(kubectl get secret aws-credentials -n level-up-accounts -o jsonpath='{.data.secret-access-key}' | base64 -d)
-          echo "AWS credentials length check: access_key=${#AWS_ACCESS_KEY_ID}, secret_key=${#AWS_SECRET_ACCESS_KEY}"
-          
-          echo "8. Testing direct AWS Secrets Manager access:"
-          export AWS_ACCESS_KEY_ID="$AWS_ACCESS_KEY_ID"
-          export AWS_SECRET_ACCESS_KEY="$AWS_SECRET_ACCESS_KEY"
-          export AWS_DEFAULT_REGION="ap-southeast-1"
-          aws secretsmanager describe-secret --secret-id "level-up-accounts/github-token" && echo "✅ Direct access works" || echo "❌ Direct access failed"
-          
-          echo "9. Creating a test SecretStore to validate configuration:"
-          cat <<EOF | kubectl apply -f - || echo "Failed to create test SecretStore"
-          apiVersion: external-secrets.io/v1beta1
-          kind: SecretStore
-          metadata:
-            name: test-aws-secrets-manager
-            namespace: level-up-accounts
-          spec:
-            provider:
-              aws:
-                service: SecretsManager
-                region: ap-southeast-1
-                auth:
-                  secretRef:
-                    accessKeyIDSecretRef:
-                      name: aws-credentials
-                      key: access-key-id
-                    secretAccessKeySecretRef:
-                      name: aws-credentials
-                      key: secret-access-key
-          EOF
-          
-          echo "10. Waiting for test SecretStore to be ready:"
-          for i in {1..30}; do
-            STATUS=$(kubectl get secretstore test-aws-secrets-manager -n level-up-accounts -o jsonpath='{.status.conditions[0].status}' 2>/dev/null || echo "Unknown")
-            echo "Test SecretStore status: $STATUS ($i/30)"
-            if [ "$STATUS" = "True" ]; then
-              echo "✅ Test SecretStore is ready!"
-              break
-            fi
-            sleep 10
-          done
-          
-          echo "=== END DEBUG ==="
+
 
   external-secrets-setup:
     needs: app-of-apps-deploy
