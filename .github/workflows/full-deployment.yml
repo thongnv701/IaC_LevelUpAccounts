@@ -530,14 +530,12 @@ jobs:
                 region: ap-southeast-1
                 auth:
                   secretRef:
-                    accessKeyID:
+                    accessKeyIDSecretRef:
                       name: aws-credentials
                       key: access-key-id
-                      namespace: level-up-accounts
-                    secretAccessKey:
+                    secretAccessKeySecretRef:
                       name: aws-credentials
                       key: secret-access-key
-                      namespace: level-up-accounts
           EOF
           
           echo "Waiting for SecretStore to be ready..."
@@ -772,10 +770,10 @@ jobs:
                 region: ap-southeast-1
                 auth:
                   secretRef:
-                    accessKeyID:
+                    accessKeyIDSecretRef:
                       name: aws-credentials
                       key: access-key-id
-                    secretAccessKey:
+                    secretAccessKeySecretRef:
                       name: aws-credentials
                       key: secret-access-key
           EOF
