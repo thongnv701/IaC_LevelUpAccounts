@@ -389,12 +389,56 @@ jobs:
           echo "Creating external-secrets-system namespace..."
           kubectl create namespace external-secrets-system --dry-run=client -o yaml | kubectl apply -f -
           
+          # Retrieve External Secrets AWS credentials from AWS Secrets Manager (created by Terraform)
+          echo "Retrieving External Secrets AWS credentials from Secrets Manager..."
+          ESO_CREDENTIALS=$(aws secretsmanager get-secret-value --secret-id "level-up-accounts/external-secrets-aws-credentials" --query SecretString --output text)
+          ESO_ACCESS_KEY_ID=$(echo "$ESO_CREDENTIALS" | jq -r '.access_key_id')
+          ESO_SECRET_ACCESS_KEY=$(echo "$ESO_CREDENTIALS" | jq -r '.secret_access_key')
+          
+          if [ "$ESO_ACCESS_KEY_ID" = "null" ] || [ "$ESO_SECRET_ACCESS_KEY" = "null" ]; then
+            echo "Warning: Could not retrieve External Secrets credentials from AWS Secrets Manager"
+            echo "Using main AWS credentials as fallback..."
+            ESO_ACCESS_KEY_ID="$AWS_ACCESS_KEY_ID"
+            ESO_SECRET_ACCESS_KEY="$AWS_SECRET_ACCESS_KEY"
+          else
+            echo "Successfully retrieved dedicated External Secrets credentials"
+          fi
+          
           # Create AWS credentials secret for External Secrets Operator
           echo "Creating AWS credentials secret for External Secrets Operator..."
           kubectl -n level-up-accounts create secret generic aws-credentials \
-            --from-literal=access-key-id="$AWS_ACCESS_KEY_ID" \
-            --from-literal=secret-access-key="$AWS_SECRET_ACCESS_KEY" \
+            --from-literal=access-key-id="$ESO_ACCESS_KEY_ID" \
+            --from-literal=secret-access-key="$ESO_SECRET_ACCESS_KEY" \
             --dry-run=client -o yaml | kubectl apply -f -
+          
+          # Verify the secret was created correctly
+          echo "Verifying aws-credentials secret..."
+          kubectl get secret aws-credentials -n level-up-accounts -o yaml | grep -E "access-key-id|secret-access-key" || echo "Failed to verify secret keys"
+          
+          # Wait for External Secrets Operator to be ready before proceeding
+          echo "Waiting for External Secrets Operator to be ready..."
+          kubectl wait --for=condition=available --timeout=300s deployment/external-secrets -n external-secrets-system || echo "ESO deployment wait timeout"
+          kubectl wait --for=condition=available --timeout=300s deployment/external-secrets-webhook -n external-secrets-system || echo "ESO webhook wait timeout"
+          kubectl wait --for=condition=available --timeout=300s deployment/external-secrets-cert-controller -n external-secrets-system || echo "ESO cert-controller wait timeout"
+          
+          # Give ESO additional time to initialize
+          echo "Giving External Secrets Operator time to initialize..."
+          sleep 30
+          
+          # Verify GitHub token exists in AWS Secrets Manager
+          echo "Verifying GitHub token in AWS Secrets Manager..."
+          if aws secretsmanager describe-secret --secret-id "level-up-accounts/github-token" >/dev/null 2>&1; then
+            echo "✅ GitHub token found in AWS Secrets Manager"
+            GITHUB_TOKEN_VALUE=$(aws secretsmanager get-secret-value --secret-id "level-up-accounts/github-token" --query SecretString --output text | jq -r '.token' 2>/dev/null || echo "parsing failed")
+            if [ ${#GITHUB_TOKEN_VALUE} -gt 10 ]; then
+              echo "✅ GitHub token appears valid (length: ${#GITHUB_TOKEN_VALUE})"
+            else
+              echo "⚠️ GitHub token may be invalid or empty"
+            fi
+          else
+            echo "❌ GitHub token NOT found in AWS Secrets Manager"
+            echo "This may cause External Secrets to fail"
+          fi
           
           echo "AWS Credentials and configuration secrets created"
           
@@ -539,6 +583,78 @@ jobs:
           if ! kubectl get clusterissuer letsencrypt-prod 2>/dev/null; then
             echo "Warning: ClusterIssuer 'letsencrypt-prod' was not found after waiting. It may be created later by ArgoCD."
           fi
+
+      - name: Debug External Secrets Status
+        env:
+          KUBECONFIG: ./kubeconfig
+        run: |
+          echo "=== DEBUGGING EXTERNAL SECRETS ==="
+          
+          echo "1. External Secrets Operator pods:"
+          kubectl get pods -n external-secrets-system || echo "No ESO pods found"
+          
+          echo "2. External Secrets Operator logs (last 20 lines):"
+          kubectl logs -n external-secrets-system deployment/external-secrets --tail=20 || echo "Could not get ESO logs"
+          
+          echo "3. SecretStore status:"
+          kubectl get secretstore -n level-up-accounts || echo "No SecretStore found"
+          kubectl describe secretstore aws-secrets-manager -n level-up-accounts || echo "Could not describe SecretStore"
+          
+          echo "4. ExternalSecret status:"
+          kubectl get externalsecret -n level-up-accounts || echo "No ExternalSecret found"
+          kubectl describe externalsecret github-auth-external -n level-up-accounts || echo "Could not describe ExternalSecret"
+          
+          echo "5. Generated github-auth secret:"
+          kubectl get secret github-auth -n level-up-accounts || echo "github-auth secret not found"
+          
+          echo "6. AWS credentials secret:"
+          kubectl get secret aws-credentials -n level-up-accounts || echo "aws-credentials secret not found"
+          
+          echo "7. Testing AWS Secrets Manager access manually:"
+          AWS_ACCESS_KEY_ID=$(kubectl get secret aws-credentials -n level-up-accounts -o jsonpath='{.data.access-key-id}' | base64 -d)
+          AWS_SECRET_ACCESS_KEY=$(kubectl get secret aws-credentials -n level-up-accounts -o jsonpath='{.data.secret-access-key}' | base64 -d)
+          echo "AWS credentials length check: access_key=${#AWS_ACCESS_KEY_ID}, secret_key=${#AWS_SECRET_ACCESS_KEY}"
+          
+          echo "8. Testing direct AWS Secrets Manager access:"
+          export AWS_ACCESS_KEY_ID="$AWS_ACCESS_KEY_ID"
+          export AWS_SECRET_ACCESS_KEY="$AWS_SECRET_ACCESS_KEY"
+          export AWS_DEFAULT_REGION="ap-southeast-1"
+          aws secretsmanager describe-secret --secret-id "level-up-accounts/github-token" && echo "✅ Direct access works" || echo "❌ Direct access failed"
+          
+          echo "9. Creating a test SecretStore to validate configuration:"
+          cat <<EOF | kubectl apply -f - || echo "Failed to create test SecretStore"
+          apiVersion: external-secrets.io/v1beta1
+          kind: SecretStore
+          metadata:
+            name: test-aws-secrets-manager
+            namespace: level-up-accounts
+          spec:
+            provider:
+              aws:
+                service: SecretsManager
+                region: ap-southeast-1
+                auth:
+                  secretRef:
+                    accessKeyID:
+                      name: aws-credentials
+                      key: access-key-id
+                    secretAccessKey:
+                      name: aws-credentials
+                      key: secret-access-key
+          EOF
+          
+          echo "10. Waiting for test SecretStore to be ready:"
+          for i in {1..30}; do
+            STATUS=$(kubectl get secretstore test-aws-secrets-manager -n level-up-accounts -o jsonpath='{.status.conditions[0].status}' 2>/dev/null || echo "Unknown")
+            echo "Test SecretStore status: $STATUS ($i/30)"
+            if [ "$STATUS" = "True" ]; then
+              echo "✅ Test SecretStore is ready!"
+              break
+            fi
+            sleep 10
+          done
+          
+          echo "=== END DEBUG ==="
 
   dns-management:
     needs: [terraform-infra]
