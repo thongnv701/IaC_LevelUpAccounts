@@ -391,21 +391,77 @@ jobs:
           
           # Retrieve External Secrets AWS credentials from AWS Secrets Manager (created by Terraform)
           echo "Retrieving External Secrets AWS credentials from Secrets Manager..."
-          ESO_CREDENTIALS=$(aws secretsmanager get-secret-value --secret-id "level-up-accounts/external-secrets-aws-credentials" --query SecretString --output text)
-          ESO_ACCESS_KEY_ID=$(echo "$ESO_CREDENTIALS" | jq -r '.access_key_id')
-          ESO_SECRET_ACCESS_KEY=$(echo "$ESO_CREDENTIALS" | jq -r '.secret_access_key')
           
-          if [ "$ESO_ACCESS_KEY_ID" = "null" ] || [ "$ESO_SECRET_ACCESS_KEY" = "null" ]; then
-            echo "Warning: Could not retrieve External Secrets credentials from AWS Secrets Manager"
+          # Check if the secret exists and is not marked for deletion
+          SECRET_STATUS=$(aws secretsmanager describe-secret --secret-id "level-up-accounts/external-secrets-aws-credentials" --query 'DeletedDate' --output text 2>/dev/null || echo "NOT_FOUND")
+          
+          if [ "$SECRET_STATUS" = "NOT_FOUND" ]; then
+            echo "Warning: External Secrets credentials secret not found in AWS Secrets Manager"
+            echo "This is normal for first-time deployments or after terraform destroy"
             echo "Using main AWS credentials as fallback..."
             ESO_ACCESS_KEY_ID="$AWS_ACCESS_KEY_ID"
             ESO_SECRET_ACCESS_KEY="$AWS_SECRET_ACCESS_KEY"
+          elif [ "$SECRET_STATUS" != "None" ]; then
+            echo "Warning: External Secrets credentials secret is marked for deletion"
+            echo "Secret deletion date: $SECRET_STATUS"
+            echo "Attempting to restore the secret from deletion..."
+            
+            # Try to restore the secret
+            if aws secretsmanager restore-secret --secret-id "level-up-accounts/external-secrets-aws-credentials" 2>/dev/null; then
+              echo "✅ Successfully restored the secret from deletion"
+              echo "Waiting for secret to be available..."
+              sleep 10
+              
+              # Try to retrieve the restored secret
+              ESO_CREDENTIALS=$(aws secretsmanager get-secret-value --secret-id "level-up-accounts/external-secrets-aws-credentials" --query SecretString --output text 2>/dev/null || echo "FAILED")
+              if [ "$ESO_CREDENTIALS" != "FAILED" ]; then
+                ESO_ACCESS_KEY_ID=$(echo "$ESO_CREDENTIALS" | jq -r '.access_key_id' 2>/dev/null || echo "null")
+                ESO_SECRET_ACCESS_KEY=$(echo "$ESO_CREDENTIALS" | jq -r '.secret_access_key' 2>/dev/null || echo "null")
+                
+                if [ "$ESO_ACCESS_KEY_ID" != "null" ] && [ "$ESO_SECRET_ACCESS_KEY" != "null" ] && [ -n "$ESO_ACCESS_KEY_ID" ] && [ -n "$ESO_SECRET_ACCESS_KEY" ]; then
+                  echo "✅ Successfully retrieved restored External Secrets credentials"
+                else
+                  echo "Warning: Restored secret has invalid credentials, using fallback..."
+                  ESO_ACCESS_KEY_ID="$AWS_ACCESS_KEY_ID"
+                  ESO_SECRET_ACCESS_KEY="$AWS_SECRET_ACCESS_KEY"
+                fi
+              else
+                echo "Warning: Could not retrieve restored secret, using fallback..."
+                ESO_ACCESS_KEY_ID="$AWS_ACCESS_KEY_ID"
+                ESO_SECRET_ACCESS_KEY="$AWS_SECRET_ACCESS_KEY"
+              fi
+            else
+              echo "Could not restore secret from deletion, using main AWS credentials as fallback..."
+              ESO_ACCESS_KEY_ID="$AWS_ACCESS_KEY_ID"
+              ESO_SECRET_ACCESS_KEY="$AWS_SECRET_ACCESS_KEY"
+            fi
           else
-            echo "Successfully retrieved dedicated External Secrets credentials"
+            # Secret exists and is not marked for deletion, try to retrieve it
+            ESO_CREDENTIALS=$(aws secretsmanager get-secret-value --secret-id "level-up-accounts/external-secrets-aws-credentials" --query SecretString --output text 2>/dev/null || echo "FAILED")
+            
+            if [ "$ESO_CREDENTIALS" = "FAILED" ]; then
+              echo "Warning: Could not retrieve External Secrets credentials value"
+              echo "Using main AWS credentials as fallback..."
+              ESO_ACCESS_KEY_ID="$AWS_ACCESS_KEY_ID"
+              ESO_SECRET_ACCESS_KEY="$AWS_SECRET_ACCESS_KEY"
+            else
+              ESO_ACCESS_KEY_ID=$(echo "$ESO_CREDENTIALS" | jq -r '.access_key_id' 2>/dev/null || echo "null")
+              ESO_SECRET_ACCESS_KEY=$(echo "$ESO_CREDENTIALS" | jq -r '.secret_access_key' 2>/dev/null || echo "null")
+              
+              if [ "$ESO_ACCESS_KEY_ID" = "null" ] || [ "$ESO_SECRET_ACCESS_KEY" = "null" ] || [ -z "$ESO_ACCESS_KEY_ID" ] || [ -z "$ESO_SECRET_ACCESS_KEY" ]; then
+                echo "Warning: External Secrets credentials are invalid or empty"
+                echo "Using main AWS credentials as fallback..."
+                ESO_ACCESS_KEY_ID="$AWS_ACCESS_KEY_ID"
+                ESO_SECRET_ACCESS_KEY="$AWS_SECRET_ACCESS_KEY"
+              else
+                echo "✅ Successfully retrieved dedicated External Secrets credentials"
+              fi
+            fi
           fi
           
           # Create AWS credentials secret for External Secrets Operator
           echo "Creating AWS credentials secret for External Secrets Operator..."
+          echo "Using credentials with access key: ${ESO_ACCESS_KEY_ID:0:8}..."
           kubectl -n level-up-accounts create secret generic aws-credentials \
             --from-literal=access-key-id="$ESO_ACCESS_KEY_ID" \
             --from-literal=secret-access-key="$ESO_SECRET_ACCESS_KEY" \
@@ -441,6 +497,16 @@ jobs:
           fi
           
           echo "AWS Credentials and configuration secrets created"
+          
+          # Important note about External Secrets credentials
+          if [ "$ESO_ACCESS_KEY_ID" = "$AWS_ACCESS_KEY_ID" ]; then
+            echo ""
+            echo "ℹ️  NOTE: Using main AWS credentials for External Secrets Operator"
+            echo "   This is expected after 'terraform destroy' or first-time deployment"
+            echo "   Terraform will create dedicated External Secrets credentials on next apply"
+            echo "   The deployment will continue normally and External Secrets will work"
+            echo ""
+          fi
           
   app-of-apps-deploy:
     needs: [aws-secret-setup]
