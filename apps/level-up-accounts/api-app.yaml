@@ -13,15 +13,8 @@ spec:
       images:
         - thongnv0701/levelupaccount:latest
       commonAnnotations:
-        argocd.argoproj.io/sync-wave: "0"
-      patches:
-        - target:
-            kind: Secret
-            name: github-auth
-          patch: |
-            - op: replace
-              path: /stringData/token
-              value: ${GITHUB_TOKEN}
+        argocd.argoproj.io/sync-wave: "2" # Deploy after External Secrets Operator and config
+      # No patches needed - External Secrets Operator creates github-auth secret automatically
   destination:
     server: https://kubernetes.default.svc
     namespace: level-up-accounts
@@ -31,10 +24,4 @@ spec:
       selfHeal: true
     syncOptions:
       - CreateNamespace=true
-  ignoreDifferences:
-    - group: ""
-      kind: Secret
-      name: github-auth
-      namespace: level-up-accounts
-      jsonPointers:
-        - /data/token
+  # No ignoreDifferences needed - External Secrets Operator manages github-auth secret

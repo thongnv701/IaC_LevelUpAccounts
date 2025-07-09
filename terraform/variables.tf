@@ -62,3 +62,9 @@ variable "worker_count" {
   type        = number
   default     = 1
 }
+
+variable "github_token" {
+  description = "GitHub token for accessing private configuration repository"
+  type        = string
+  sensitive   = true
+}

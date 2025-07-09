@@ -35,6 +35,7 @@ jobs:
       TF_VAR_master_instance_type: ${{ secrets.MASTER_INSTANCE_TYPE }}
       TF_VAR_worker_instance_type: ${{ secrets.WORKER_INSTANCE_TYPE }}
       TF_VAR_worker_count: ${{ secrets.WORKER_COUNT }}
+      TF_VAR_github_token: ${{ secrets.GIT_TOKEN }}
       AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
       AWS_DEFAULT_REGION: "ap-southeast-1"
@@ -280,14 +281,22 @@ jobs:
             --from-literal=access-key-id="$AWS_ACCESS_KEY_ID" \
             --dry-run=client -o yaml | kubectl apply -f -
 
-          # Create level-up-accounts namespace and initial github-auth secret
-          echo "Creating level-up-accounts namespace and github-auth secret..."
+          # Create level-up-accounts namespace (github-auth secret will be managed by External Secrets Operator)
+          echo "Creating level-up-accounts namespace..."
           kubectl create namespace level-up-accounts --dry-run=client -o yaml | kubectl apply -f -
-          kubectl -n level-up-accounts create secret generic github-auth \
-            --from-literal=token="placeholder" \
+          
+          # Create external-secrets-system namespace for External Secrets Operator
+          echo "Creating external-secrets-system namespace..."
+          kubectl create namespace external-secrets-system --dry-run=client -o yaml | kubectl apply -f -
+          
+          # Create AWS credentials secret for External Secrets Operator
+          echo "Creating AWS credentials secret for External Secrets Operator..."
+          kubectl -n level-up-accounts create secret generic aws-credentials \
+            --from-literal=access-key-id="$AWS_ACCESS_KEY_ID" \
+            --from-literal=secret-access-key="$AWS_SECRET_ACCESS_KEY" \
             --dry-run=client -o yaml | kubectl apply -f -
           
-          echo "AWS Credentials, configuration secrets, and initial github-auth secret created"
+          echo "AWS Credentials and configuration secrets created"
           
   app-of-apps-deploy:
     needs: [aws-secret-setup]
@@ -394,50 +403,7 @@ jobs:
             echo "Warning: ClusterIssuer 'letsencrypt-prod' was not found after waiting. It may be created later by ArgoCD."
           fi
 
-  patch-github-auth-secret:
-    needs: [app-of-apps-deploy]
-    if: ${{ always() && (needs.app-of-apps-deploy.result == 'success' || needs.app-of-apps-deploy.result == 'skipped') }}
-    runs-on: ubuntu-latest
-    environment: terraform
-    env:
-      KUBECONFIG: ./kubeconfig
-      GIT_TOKEN: ${{ secrets.GIT_TOKEN }}
-    steps:
-      - name: Download kubeconfig from artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: kubeconfig
-          path: ./
 
-      - name: Patch github-auth secret
-        env:
-          KUBECONFIG: ./kubeconfig
-        run: |
-          # Wait for the secret to exist (created by aws-secret-setup)
-          echo "Waiting for github-auth secret..."
-          for i in {1..30}; do
-            if kubectl get secret github-auth -n level-up-accounts &>/dev/null; then
-              echo "github-auth secret found, patching with real token..."
-              # Create a base64 encoded version of the token
-              TOKEN_BASE64=$(echo -n "$GIT_TOKEN" | base64)
-              kubectl patch secret github-auth -n level-up-accounts --type=json -p='[
-                {"op": "replace", "path": "/data/token", "value": "'"$TOKEN_BASE64"'"}
-              ]'
-              break
-            fi
-            echo "Waiting for github-auth secret... ($i/30)"
-            sleep 5
-          done
-
-          if ! kubectl get secret github-auth -n level-up-accounts &>/dev/null; then
-            echo "Warning: github-auth secret not found after waiting. Creating it now..."
-            kubectl create secret generic github-auth \
-              --namespace level-up-accounts \
-              --from-literal=token="$GIT_TOKEN" \
-              --dry-run=client -o yaml | kubectl apply -f -
-          fi
-
-          echo "github-auth secret setup completed"
 
   dns-management:
     needs: [terraform-infra]
