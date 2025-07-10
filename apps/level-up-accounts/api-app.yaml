@@ -6,9 +6,9 @@ metadata:
 spec:
   project: default
   source:
-    repoURL: https://github.com/thongnv701/IaC_LevelUpAccounts.git
+    repoURL: https://github.com/thongnv701/level-up-accounts.git
     targetRevision: HEAD
-    path: k8s/api
+    path: k8s
     kustomize:
       images:
         - docker.io/thongnv0701/levelupaccounts=thongnv0701/levelupaccounts:latest
