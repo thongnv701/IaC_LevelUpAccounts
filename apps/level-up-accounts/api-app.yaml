@@ -1,17 +1,23 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: level-up-accounts-api
+  name: level-up-accounts-api-prod
   namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "3"
+    notifications.argoproj.io/subscribe.on-deployment-started.slack: ""
+    notifications.argoproj.io/subscribe.on-deployment-failed.slack: ""
+  labels:
+    app.kubernetes.io/name: level-up-accounts-api
+    app.kubernetes.io/instance: production
+    app.kubernetes.io/environment: prod
 spec:
   project: default
   source:
     repoURL: https://github.com/thongnv701/level-up-accounts.git
     targetRevision: HEAD
-    path: k8s
+    path: k8s-manifests/overlays/prod
     kustomize:
-      images:
-        - docker.io/thongnv0701/levelupaccounts=thongnv0701/levelupaccounts:latest
       commonAnnotations:
         argocd.argoproj.io/sync-wave: "3" # Deploy after External Secrets and Nginx Ingress
       # No patches needed - External Secrets Operator creates github-auth secret automatically
@@ -19,9 +25,12 @@ spec:
     server: https://kubernetes.default.svc
     namespace: level-up-accounts
   syncPolicy:
-    automated:
-      prune: true
-      selfHeal: true
+    # Manual sync for production safety - no automated deployments
     syncOptions:
       - CreateNamespace=true
-  # No ignoreDifferences needed - External Secrets Operator manages github-auth secret
+      - ApplyOutOfSyncOnly=true
+    # Uncomment for automated sync if desired:
+    # automated:
+    #   prune: true
+    #   selfHeal: true
+  # No ignoreDifferences needed - External Secrets Operator manages github-auth secret  

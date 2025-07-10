@@ -16,13 +16,13 @@ spec:
           ingressClassName: nginx
           hosts:
             - grafana.thongit.space
-          tls:
-            - hosts:
-                - grafana.thongit.space
-              secretName: grafana-tls
+          # tls:  # Using ALB/ACM termination instead
+          #   - hosts:
+          #       - grafana.thongit.space
+          #     secretName: grafana-tls
           annotations:
             nginx.ingress.kubernetes.io/ssl-redirect: "true"
-            cert-manager.io/cluster-issuer: "letsencrypt-prod"
+            # cert-manager.io/cluster-issuer: "letsencrypt-prod"  # Using ALB/ACM instead
 
         adminPassword: "admin-password"
 
