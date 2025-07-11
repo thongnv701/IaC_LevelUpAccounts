@@ -459,17 +459,26 @@ jobs:
             fi
           fi
           
-          # Create AWS credentials secret for External Secrets Operator
+          # Create AWS credentials secret for External Secrets Operator in multiple namespaces
           echo "Creating AWS credentials secret for External Secrets Operator..."
           echo "Using credentials with access key: ${ESO_ACCESS_KEY_ID:0:8}..."
+          
+          # Create in level-up-accounts namespace
           kubectl -n level-up-accounts create secret generic aws-credentials \
             --from-literal=access-key-id="$ESO_ACCESS_KEY_ID" \
             --from-literal=secret-access-key="$ESO_SECRET_ACCESS_KEY" \
             --dry-run=client -o yaml | kubectl apply -f -
           
-          # Verify the secret was created correctly
-          echo "Verifying aws-credentials secret..."
-          kubectl get secret aws-credentials -n level-up-accounts -o yaml | grep -E "access-key-id|secret-access-key" || echo "Failed to verify secret keys"
+          # Create in argocd namespace for ArgoCD's External Secrets
+          kubectl -n argocd create secret generic aws-credentials \
+            --from-literal=access-key-id="$ESO_ACCESS_KEY_ID" \
+            --from-literal=secret-access-key="$ESO_SECRET_ACCESS_KEY" \
+            --dry-run=client -o yaml | kubectl apply -f -
+          
+          # Verify the secrets were created correctly
+          echo "Verifying aws-credentials secrets..."
+          kubectl get secret aws-credentials -n level-up-accounts -o yaml | grep -E "access-key-id|secret-access-key" || echo "Failed to verify secret keys in level-up-accounts"
+          kubectl get secret aws-credentials -n argocd -o yaml | grep -E "access-key-id|secret-access-key" || echo "Failed to verify secret keys in argocd"
           
           echo "External Secrets Operator will be deployed later through ArgoCD."
           
