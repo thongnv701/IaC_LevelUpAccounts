@@ -23,12 +23,13 @@ spec:
       # No patches needed - External Secrets Operator creates github-auth secret automatically
   destination:
     server: https://kubernetes.default.svc
-    namespace: level-up-accounts
+    namespace: levelupaccounts-prod
   syncPolicy:
     # Manual sync for production safety - no automated deployments
     syncOptions:
       - CreateNamespace=true
       - ApplyOutOfSyncOnly=true
+      - RespectIgnoreDifferences=true
     # Uncomment for automated sync if desired:
     # automated:
     #   prune: true
