@@ -381,9 +381,10 @@ jobs:
             --from-literal=access-key-id="$AWS_ACCESS_KEY_ID" \
             --dry-run=client -o yaml | kubectl apply -f -
 
-          # Create level-up-accounts namespace (github-auth secret will be managed by External Secrets Operator)
-          echo "Creating level-up-accounts namespace..."
+          # Create level-up-accounts and levelupaccounts-prod namespaces (github-auth secrets will be managed by External Secrets Operator)
+          echo "Creating level-up-accounts and levelupaccounts-prod namespaces..."
           kubectl create namespace level-up-accounts --dry-run=client -o yaml | kubectl apply -f -
+          kubectl create namespace levelupaccounts-prod --dry-run=client -o yaml | kubectl apply -f -
           
           # Create external-secrets-system namespace for External Secrets Operator
           echo "Creating external-secrets-system namespace..."
