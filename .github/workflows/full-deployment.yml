@@ -381,9 +381,10 @@ jobs:
             --from-literal=access-key-id="$AWS_ACCESS_KEY_ID" \
             --dry-run=client -o yaml | kubectl apply -f -
 
-          # Create level-up-accounts and levelupaccounts-prod namespaces (github-auth secrets will be managed by External Secrets Operator)
-          echo "Creating level-up-accounts and levelupaccounts-prod namespaces..."
+          # Create level-up-accounts, levelupaccounts-dev, and levelupaccounts-prod namespaces (github-auth secrets will be managed by External Secrets Operator)
+          echo "Creating level-up-accounts, levelupaccounts-dev, and levelupaccounts-prod namespaces..."
           kubectl create namespace level-up-accounts --dry-run=client -o yaml | kubectl apply -f -
+          kubectl create namespace levelupaccounts-dev --dry-run=client -o yaml | kubectl apply -f -
           kubectl create namespace levelupaccounts-prod --dry-run=client -o yaml | kubectl apply -f -
           
           # Create external-secrets-system namespace for External Secrets Operator
@@ -476,6 +477,12 @@ jobs:
             --from-literal=secret-access-key="$ESO_SECRET_ACCESS_KEY" \
             --dry-run=client -o yaml | kubectl apply -f -
           
+          # Create in levelupaccounts-dev namespace for development External Secrets
+          kubectl -n levelupaccounts-dev create secret generic aws-credentials \
+            --from-literal=access-key-id="$ESO_ACCESS_KEY_ID" \
+            --from-literal=secret-access-key="$ESO_SECRET_ACCESS_KEY" \
+            --dry-run=client -o yaml | kubectl apply -f -
+          
           # Create in levelupaccounts-prod namespace for production External Secrets
           kubectl -n levelupaccounts-prod create secret generic aws-credentials \
             --from-literal=access-key-id="$ESO_ACCESS_KEY_ID" \
@@ -486,6 +493,7 @@ jobs:
           echo "Verifying aws-credentials secrets..."
           kubectl get secret aws-credentials -n level-up-accounts -o yaml | grep -E "access-key-id|secret-access-key" || echo "Failed to verify secret keys in level-up-accounts"
           kubectl get secret aws-credentials -n argocd -o yaml | grep -E "access-key-id|secret-access-key" || echo "Failed to verify secret keys in argocd"
+          kubectl get secret aws-credentials -n levelupaccounts-dev -o yaml | grep -E "access-key-id|secret-access-key" || echo "Failed to verify secret keys in levelupaccounts-dev"
           kubectl get secret aws-credentials -n levelupaccounts-prod -o yaml | grep -E "access-key-id|secret-access-key" || echo "Failed to verify secret keys in levelupaccounts-prod"
           
           echo "External Secrets Operator will be deployed later through ArgoCD."
