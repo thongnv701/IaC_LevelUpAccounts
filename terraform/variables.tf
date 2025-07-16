@@ -53,7 +53,8 @@ variable "managed_domains" {
   default     = [
     "argocd.thongit.space",
     "grafana.thongit.space",
-    "api.thongit.space"
+    "api.thongit.space",
+    "api-dev.thongit.space"
   ]
 }
 
